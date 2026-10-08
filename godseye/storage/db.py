@@ -4,7 +4,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE cameras (
@@ -46,7 +46,17 @@ CREATE INDEX ix_obs_track ON observations(track_row, ts);
 CREATE INDEX ix_obs_clip ON observations(clip_id);
 CREATE INDEX ix_clips_cam_time ON clips(camera_id, start_ts, end_ts);
 CREATE INDEX ix_ident_last ON identities(last_seen);
+CREATE INDEX ix_tracks_start ON tracks(start_ts);
+CREATE INDEX ix_tracks_label_time ON tracks(label, start_ts);
+CREATE INDEX ix_tracks_class_time ON tracks(reid_class, start_ts);
 """
+
+# v1 -> v2 (Phase 5 retrieval): indexes so label / class / time-only queries never scan the tracks table.
+MIGRATIONS = {2: """
+CREATE INDEX IF NOT EXISTS ix_tracks_start ON tracks(start_ts);
+CREATE INDEX IF NOT EXISTS ix_tracks_label_time ON tracks(label, start_ts);
+CREATE INDEX IF NOT EXISTS ix_tracks_class_time ON tracks(reid_class, start_ts);
+"""}
 
 
 class DatabaseError(RuntimeError):
@@ -63,6 +73,9 @@ def connect(path: Path) -> sqlite3.Connection:
     ver = conn.execute("PRAGMA user_version").fetchone()[0]
     if ver == 0:
         conn.executescript("BEGIN;" + SCHEMA + f"PRAGMA user_version={SCHEMA_VERSION};COMMIT;")
+    elif ver < SCHEMA_VERSION and ver > 0:
+        for v in range(ver + 1, SCHEMA_VERSION + 1):
+            conn.executescript("BEGIN;" + MIGRATIONS[v] + f"PRAGMA user_version={v};COMMIT;")
     elif ver != SCHEMA_VERSION:
         raise DatabaseError(f"{path}: schema version {ver}, code expects {SCHEMA_VERSION} (no migration defined)")
     return conn

@@ -47,7 +47,7 @@ User → Chat UI → Local LLM / NLU → Referent Resolver → Clarification Eng
 Exact module layout and per-component interfaces: NOT YET DESIGNED (no code exists).
 
 # CURRENT PHASE
-Phase 4 — Query understanding (Track B up to the Resolved Query Context): implemented and tested (see PHASE 4 at the end), awaiting user acceptance before Phase 5. Query Planner and everything after it are NOT built. Earlier caveats remain (RTMP unverified; Re-ID cross-domain accuracy; vehicle Re-ID unvalidated; 640-vs-768 input; Llama 3 vs Qwen deviation).
+Phase 5 — Query planning, retrieval, path reconstruction & response: implemented and tested (see PHASE 5 at the end), awaiting user acceptance before Phase 6. The Track B pipeline now runs end to end in a terminal chat; there is no web UI, no soak/performance testing and no multi-process deployment yet (Phase 6). Earlier caveats remain (RTMP unverified; Re-ID cross-domain accuracy; vehicle Re-ID unvalidated; 640-vs-768 input; Qwen instead of Llama 3).
 Phase prompts live in `cctv_claude_code_prompts/` (master contract `00_*`, phases `01_`–`08_`). Docs required by the contract are in `docs/`.
 
 # PHASE STATUS
@@ -56,7 +56,7 @@ Phase prompts live in `cctv_claude_code_prompts/` (master contract `00_*`, phase
 - Phase 2 — AI perception, tracking & cross-camera identity (NanoOwl, ByteTrack, FastReID): COMPLETE pending acceptance (vehicle Re-ID unvalidated; Re-ID thresholds uncalibrated for any real site)
 - Phase 3 — Storage & evidence (ChromaDB, SQLite, clips): COMPLETE pending acceptance (retrieval NOT implemented by design; single-writer; clips need ffmpeg)
 - Phase 4 — Query understanding: COMPLETE pending acceptance (terminal chat only; LLM = qwen3:8b by user approval, NOT Llama 3)
-- Phase 5 — Retrieval, path reconstruction, response: NOT STARTED
+- Phase 5 — Retrieval, path reconstruction, response: COMPLETE pending acceptance (topology is a placeholder example until measured on site; attribute search is approximate)
 - Phase 6 — Integration & hardening: NOT STARTED
 - Phase 7 — Final audit: NOT STARTED
 
@@ -69,8 +69,8 @@ Verified by the tests listed in TEST STATUS:
 - `godseye/ingest/preprocess.py` — privacy masks, letterbox 640, RGB float32 [0,1], coordinate transform with round-trip.
 - `godseye/ingest/manager.py` — `IngestManager` + bounded `FrameBus`.
 - `config/ingest.yaml` (ships with `cameras: []`), `docs/*.md`, `tests/`.
-Phase 2 (`godseye/perception/`): see PHASE 2 below. Phase 3 (`godseye/storage/`): see PHASE 3 below. Phase 4 (`godseye/query/`): see PHASE 4 below.
-NOT implemented: Phases 5–7 (no Query Planner, retrieval, path reconstruction, response builder, web UI).
+Phase 2 (`godseye/perception/`): see PHASE 2 below. Phase 3 (`godseye/storage/`): see PHASE 3 below. Phase 4 (`godseye/query/`): see PHASE 4 below. Phase 5 (`godseye/answer/`): see PHASE 5 below.
+NOT implemented: Phases 6–7 (integration/hardening, final audit); no web UI.
 
 # TECHNOLOGY REQUIREMENTS
 
@@ -130,7 +130,7 @@ Planned responsibilities (none created yet):
 - Filesystem clips: evidence video clips. SQLite stores paths and time ranges. Layout: NOT DESIGNED.
 
 # TEST STATUS
-Command: `.venv/bin/python -m pytest tests -q` (2026-10-08, after Phase 4): **134 passed, 1 skipped** in about 141 s (Phase 4 added 31) (skipped = RTMP integration test, needs `GODSEYE_TEST_RTMP_URL`). Phase 1 alone: 65 passed. Phase 2 tests: see PHASE 2 TESTS.
+Command: `.venv/bin/python -m pytest tests -q` (2026-10-08, after Phase 5): **175 passed, 1 skipped** in about 214 s (Phase 5 added 40, plus 1 Phase 3 regression test) (skipped = RTMP integration test, needs `GODSEYE_TEST_RTMP_URL`). Phase 1 alone: 65 passed. Phase 2 tests: see PHASE 2 TESTS.
 Covered: config validation, preprocessing/coordinate round-trips, sampler rates (2 fps base, ~5 fps burst, static gating, keepalive), bus policies/fairness, multi-camera isolation, real RTSP and HLS ingest, disconnect/reconnect (stream_epoch), stall recovery, invalid/missing/404 streams, max_attempts, hw_accel failure, queue pressure, loop_file, runtime add/remove, shutdown, environment failure, malformed buffers.
 NOT covered: RTMP, real cameras, hardware decode, soak/performance. No performance numbers measured.
 
@@ -165,9 +165,9 @@ Pending (need user input): LLM choice (Qwen vs Llama 3), NanoOwl/FastReID weight
 2. Phase 2 (`cctv_claude_code_prompts/03_PHASE_2_AI_PERCEPTION.md`): FIRST verify NanoOwl package/weights/inference API and torch/TensorRT on the RTX 5050 (CUDA 13.2). If unverifiable, STOP and report per the master contract. Do not substitute YOLO or another detector.
 
 # NEXT ACTION
-1. User accepts or rejects Phase 4 (and open items: Llama 3 pull?, Re-ID calibration data, vehicle Re-ID data, input-size spec).
-2. Phase 5 (`06_*`): Query Planner (allow-listed operations on a `ResolvedQueryContext`), Retrieval Engine (SQLite + `VectorStore.search`), Path Reconstructor, Response Builder. After each answer call `Session.remember(global_id, reid_class, label)` for the entities returned so pronouns resolve.
-3. Still open from Phase 1: RTMP integration verification.
+1. User accepts or rejects Phase 5; supplies the real camera topology (travel times) and real site footage for calibration.
+2. Phase 6 (`07_*`): integration and hardening (run Track A and B together, web UI, concurrency between the Track A writer and Track B readers incl. ChromaDB multi-process access, retention, performance/soak).
+3. Still open: RTMP verification (Phase 1); Re-ID calibration + vehicle Re-ID data (Phase 2); Llama 3 vs Qwen (Phase 4); 640-vs-768 input spec.
 
 # PHASE 2 — AI PERCEPTION (COMPLETE pending acceptance; verified 2026-10-08)
 ## Pipeline / modules (`godseye/perception/`)
@@ -256,3 +256,29 @@ LLM output is parsed into `ParsedQuery` (strict, inert data). Every value reachi
 7. Intent is only extracted here; whether an intent can be answered with the stored data is a Phase 5 concern.
 ## PHASE 4 DECISIONS
 Code (not the LLM) does calendar arithmetic; LLM output is schema-constrained AND strictly re-validated; resolver cascade never jumps to the LLM first; semantic stage reuses the detector's CLIP text tower instead of a new embedding model; knowledge lives in Track B's own SQLite file, Track A's DB is read-only to Track B; clarification answers are validated and learned only from explicit user choices.
+
+# PHASE 5 — PLANNING, RETRIEVAL, PATHS, RESPONSES (COMPLETE pending acceptance; verified 2026-10-08)
+Boundary: `ResolvedQueryContext` -> Query Planner -> Retrieval Engine -> Path Reconstructor -> Response Builder -> `Answer`. Code: `godseye/answer/`; config `config/answer.yaml`, `config/topology.example.yaml`; entry `AnswerEngine.run(ctx, session=None) -> Answer`; the terminal chat (`python -m godseye.query.chat`) now prints `[STATUS]` + answer.
+## QueryPlan (`plan.py`)
+Strict pydantic (`extra=forbid`): operation (allow-list: find_tracks, count_tracks, locate_latest, when_seen, path), semantic_query, camera_filter, time_filter, spatial_filter (normalised regions), object_filter (label + reid_class), identity_filter (global_id XOR track_ref), ranking_strategy (recency|confidence|duration|semantic), reconstruction_required, limit, min_confidence, notes. `make_plan` is DETERMINISTIC (intent -> operation; attributes -> semantic text); the LLM does not construct plans (spec says it may; not used, so nothing the model says can widen what runs). `validate_plan` runs before any retrieval: cameras exist and are path-safe, ids well-formed AND present, time ordered, label in vocabulary, limit <= max_limit, op/flag consistency, a subject is present. Invalid plan -> `SYSTEM_ERROR` (never a guessed answer).
+## Retrieval (`retrieval.py`)
+Read-only SQLite (`mode=ro`) + ChromaDB `track_clip` (`get_collection` only). SQL assembled from constant fragments with bound parameters; ORDER BY from an allow-list; candidate cap 2000 (flagged PARTIAL when hit). Track A schema is now v2 (migrated automatically by the Track A writer): added indexes `tracks(start_ts)`, `tracks(label,start_ts)`, `tracks(reid_class,start_ts)`; a test asserts `EXPLAIN QUERY PLAN` shows no table scan for the main queries. Semantic ranking: query text embedded with the OWL-ViT text tower (the same CLIP space as the stored reused detection embeddings), then Chroma `query(ids=<SQL candidate ids>)` cosine; tracks with no stored embedding are reported, not ranked. Spatial filter: observation box centres vs normalised regions using frame size taken from the camera's latest clip (cameras without any clip cannot be evaluated -> excluded + PARTIAL). Evidence per track = highest-confidence observation with clip path/frame; the clip file is checked on disk at answer time (`ok | not_recorded | missing_file | marked_missing | marked_corrupt`). Coverage: per camera, fraction of the requested window inside `cameras.first_seen..last_seen`.
+## Path model (`path.py`, `topology.py`)
+`Visit` = OBSERVED (tracks of one global_id on one camera, merged if closer than `merge_gap_s`), with first/last observed position and best evidence. `Transition` = always INFERRED (identity not seen in between) with a verdict: `plausible` | `unverified` (no topology / pair not checkable) | `impossible_too_fast` (gap < shortest route - tolerance) | `impossible_no_route` | `impossible_overlap` (seen on two non-overlapping cameras at once) | `long_gap` (> max_gap_s). Impossible/long-gap transitions split the path into episodes with no link asserted, and impossible ones add a warning that the global_id may cover two objects. Topology = YAML links with min/max travel seconds (+overlap, directed); shortest route by Dijkstra on min travel. `config/topology.example.yaml` holds PLACEHOLDER numbers, not a real site topology; with none configured every cross-camera transition is `unverified` and the answer says so.
+## Response behaviour (`response.py`)
+Statuses: `OK`, `NO_RESULT` (valid query, nothing stored; text says this does not prove absence), `PARTIAL_EVIDENCE` (missing/marked clips, low detection confidence < `low_confidence`, unverified/impossible transitions, capped or unevaluable filters, counts containing unidentified tracks), `AMBIGUOUS_RESULT` (locate/path for a class of object with several individuals -> lists candidate identities to choose from), `SYSTEM_ERROR` (invalid plan, store/Chroma/embedder failure; says no result was produced). Factual text comes only from templates filled with retrieved rows (camera, time, confidence, clip path+frame, identity, status). Counts report tracks, distinct identities and unidentified tracks (an upper bound on unique objects). `locate` says it is the last recorded sighting, not a live position. Optional LLM rewording (`llm_wording`, default OFF): accepted only if every number/id/camera token survives, none is added, OBSERVED/INFERRED label counts are unchanged, length is bounded and few new content words appear; otherwise the template text is used. After each answer the returned identities are added to `Session.focus`.
+## PHASE 5 TESTS
+`tests/test_answer.py` (35; REAL Track A store built by `tests/support/scenario.py` with the real EvidenceStore/ffmpeg/Chroma + real OWL-ViT text tower; LLM only as a scripted double in the wording tests): query->plan for every intent, invalid-plan rejection (hostile ids/cameras/labels), plan invariants, metadata filters (camera/time/label/identity/track_ref), spatial filter, no-table-scan EXPLAIN check, bound-parameter check with a hostile label, semantic ranking (red vs blue car), semantic unavailable -> SYSTEM_ERROR, grounded OK answer with an existing clip, NO_RESULT, coverage warning, low confidence + missing clip -> PARTIAL, ambiguous results, count semantics, when_seen merging, plausible path (OBSERVED vs INFERRED), impossible_overlap / too_fast / long_gap, unverified without topology, path filters, topology loader/routing, LLM-wording rejection cases, every id/camera in answers exists in the store, closed DB -> SYSTEM_ERROR, read-only engine + session memory, config + no-execution-primitive scan.
+`tests/test_answer_real.py` (5; real video -> real perception -> real store -> real qwen3:8b understanding -> engine): real embeddings are closer to "a person" than "a bus"/"a cat", count/find/path on real data with existing decodable clips, real question -> grounded answer, real LLM rewording adds no data tokens.
+## PHASE 5 LIMITATIONS / ISSUES
+1. Attribute search ("red jacket") is approximate: CLIP cosine of the stored per-track mean embedding vs a text embedding, uncalibrated, relative only. Verified on real data only that person embeddings align with "person" more than "bus"/"cat"; colour/clothing attributes were verified only with controlled text-derived vectors, NOT on real images.
+2. Topology must be measured on site; the shipped example is a placeholder. Camera coverage uses only `cameras.first_seen/last_seen` (gaps inside that span are not detected).
+3. Spatial filters need at least one stored clip per camera (frame size comes from clips); stored positions are pixels of the original frame.
+4. Concurrency: Track B opens Track A's SQLite read-only (WAL, fine) but opens the ChromaDB persistent directory from a second process; multi-process Chroma access while Track A writes is NOT verified (tests are sequential). Phase 6 should use a Chroma server or snapshot.
+5. The Track A schema migrated to v2 (indexes); an older DB is migrated when the Track A writer opens it, Track B only warns on v1.
+6. LLM wording is a convenience; the check blocks changed data, labels and mostly new words but cannot guarantee a harmless qualitative phrase is absent, so it is off by default. The planner does not use the LLM.
+7. Counts are track counts; same-person re-detections without identity inflate them (stated in every count answer). Identity quality is limited by the Phase 2 Re-ID caveats (false splits more likely than false merges).
+8. Performance not measured at scale (candidate cap 2000, per-track subqueries). `locate_latest` without an identity returns recent sightings of different individuals as AMBIGUOUS rather than choosing one.
+9. Bugs found by Phase 5 work and fixed: Phase 3 store raised a Chroma DuplicateIDError when a track was live and ended in the same frame (ids now deduped, regression test); the LLM-wording check first accepted a fabricated sentence and a relabelled INFERRED->OBSERVED step (check tightened, tests added).
+## PHASE 5 DECISIONS
+Deterministic planner; allow-listed operations; every transition between observed visits is INFERRED and judged against an explicit topology (no topology => unverified, never silently plausible); statuses are mutually distinct and SYSTEM_ERROR never masquerades as NO_RESULT; index migration instead of accepting table scans; LLM wording opt-in with fact-preservation checks.

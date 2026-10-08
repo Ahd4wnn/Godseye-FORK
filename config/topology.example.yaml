@@ -1,0 +1,5 @@
+# Camera topology: how long it takes to get from one camera's view to another's. NOT shipped as a real topology: these
+# numbers are placeholders that must be measured for the real site. Used only to validate cross-camera transitions.
+links:
+  - {a: lobby_cam, b: cam2, min_travel_s: 8, max_travel_s: 90}          # symmetric unless directed: true
+  - {a: cam2, b: north_gate, min_travel_s: 0, max_travel_s: 20, overlap: true}   # overlapping fields of view

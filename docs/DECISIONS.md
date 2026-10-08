@@ -27,3 +27,10 @@
 20. **Time arithmetic in code**; the LLM extracts a `TimeSpec` only.
 21. **Resolver cascade exact -> fuzzy -> semantic (OWL-ViT text tower) -> LLM**; LLM may only pick from offered candidates.
 22. **Track B owns `knowledge.db`; `godseye.db` is opened read-only.**
+
+## Phase 5 (details in CLAUDE.md, PHASE 5)
+23. **Deterministic QueryPlan with an allow-list of operations**; the LLM never builds or edits plans.
+24. **Transitions between camera visits are always INFERRED** and judged against a configured topology; impossible ones split the path and warn of identity-merge errors.
+25. **Schema v2 indexes** (tracks by label/class/start time) so retrieval never scans.
+26. **Semantic search = OWL-ViT text tower vs stored reused detection embeddings** (no new embedding model).
+27. **LLM rewording is opt-in and fact-checked against the template text.**

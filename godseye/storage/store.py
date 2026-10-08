@@ -123,7 +123,9 @@ class EvidenceStore:
                 ids.append(self._eid(e.camera_id, e.stream_epoch, e.track_id)); vecs.append(last.clip_embedding)
                 metas.append(self._emeta(e.camera_id, e.stream_epoch, e.track_id, e.global_id, e.reid_class))
         if ids:
-            self.vectors.upsert("track_clip", ids, vecs, metas)
+            last = {i: k for k, i in enumerate(ids)}            # one id may appear twice (live + ended in one frame): last wins
+            keep = sorted(last.values())
+            self.vectors.upsert("track_clip", [ids[k] for k in keep], [vecs[k] for k in keep], [metas[k] for k in keep])
 
     @staticmethod
     def _eid(cam, epoch, tid) -> str:

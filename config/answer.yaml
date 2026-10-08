@@ -1,0 +1,9 @@
+# Phase 5 planning / retrieval / path / response. See CLAUDE.md (PHASE 5).
+store_root: data/store
+topology: ""                 # e.g. config/topology.yaml (see config/topology.example.yaml). Empty = transitions are reported as UNVERIFIED.
+default_limit: 10
+max_limit: 50
+merge_gap_s: 30
+max_gap_s: 600
+low_confidence: 0.35
+llm_wording: false

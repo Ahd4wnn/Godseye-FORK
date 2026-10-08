@@ -316,3 +316,12 @@ def test_config_validation():
     with pytest.raises(StorageConfigError):
         parse({"crf": 99})
     assert load_config("config/storage.yaml").root == "data/store"
+
+
+def test_track_live_and_ended_in_the_same_frame_does_not_break_vector_upsert(tmp_path):
+    s = EvidenceStore(cfg(tmp_path))
+    last = feed(s, 2)
+    t = track(seq=2, hits=3, gid=None)                                  # hits % track_embed_every == 0 AND ends this frame
+    s.write(ef(frame(seq=2), [t], [ended(t)]))
+    assert s.vectors.count("track_clip") == 1
+    s.close()
