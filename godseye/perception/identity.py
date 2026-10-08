@@ -52,7 +52,7 @@ class IdentityGallery:
 class IdentityResolver:
     def __init__(self, cfg: IdentityConfig, gallery: IdentityGallery | None = None):
         self.cfg = cfg
-        self.gallery = gallery or IdentityGallery(cfg.max_exemplars)
+        self.gallery = gallery if gallery is not None else IdentityGallery(cfg.max_exemplars)   # NOT `or`: an empty gallery is falsy
         self._active: dict[str, set[tuple[str, int]]] = {}         # gid -> {(camera_id, track_id)} currently alive
 
     def wants_feature(self, m: TrackMeta) -> bool:

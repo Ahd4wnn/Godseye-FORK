@@ -1,0 +1,11 @@
+# Phase 3 storage. Paths are relative to the project root. See CLAUDE.md (PHASE 3).
+root: data/store
+clip_fps: 5.0
+idle_close_s: 5.0
+max_segment_s: 60.0
+min_free_bytes: 2147483648
+crf: 26
+preset: veryfast
+chroma_query_k: 100
+track_embed_every: 10
+max_exemplars: 20

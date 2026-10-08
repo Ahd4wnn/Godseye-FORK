@@ -47,14 +47,14 @@ User → Chat UI → Local LLM / NLU → Referent Resolver → Clarification Eng
 Exact module layout and per-component interfaces: NOT YET DESIGNED (no code exists).
 
 # CURRENT PHASE
-Phase 2 — AI perception, tracking & cross-camera identity: implemented and tested (see PHASE 2 below), awaiting user acceptance before Phase 3. Open items: Re-ID accuracy is cross-domain-limited, vehicle Re-ID unvalidated, 640-vs-768 input decision (see PHASE 2 LIMITATIONS). Phase 1 still has the RTMP gap.
+Phase 3 — Storage & evidence (ChromaDB, SQLite, clips): implemented and tested (see PHASE 3 at the end), awaiting user acceptance before Phase 4. Phase 2 and Phase 1 caveats remain (RTMP unverified; Re-ID cross-domain accuracy; vehicle Re-ID unvalidated; 640-vs-768 input decision).
 Phase prompts live in `cctv_claude_code_prompts/` (master contract `00_*`, phases `01_`–`08_`). Docs required by the contract are in `docs/`.
 
 # PHASE STATUS
 - Phase 0 — Architecture & CLAUDE.md: COMPLETE
 - Phase 1 — Video ingestion (GStreamer → sampling → preprocessing): COMPLETE except RTMP integration verification (BLOCKED on an RTMP server)
 - Phase 2 — AI perception, tracking & cross-camera identity (NanoOwl, ByteTrack, FastReID): COMPLETE pending acceptance (vehicle Re-ID unvalidated; Re-ID thresholds uncalibrated for any real site)
-- Phase 3 — Storage & evidence (ChromaDB, SQLite, clips): NOT STARTED
+- Phase 3 — Storage & evidence (ChromaDB, SQLite, clips): COMPLETE pending acceptance (retrieval NOT implemented by design; single-writer; clips need ffmpeg)
 - Phase 4 — Query understanding: NOT STARTED
 - Phase 5 — Retrieval, path reconstruction, response: NOT STARTED
 - Phase 6 — Integration & hardening: NOT STARTED
@@ -69,8 +69,8 @@ Verified by the tests listed in TEST STATUS:
 - `godseye/ingest/preprocess.py` — privacy masks, letterbox 640, RGB float32 [0,1], coordinate transform with round-trip.
 - `godseye/ingest/manager.py` — `IngestManager` + bounded `FrameBus`.
 - `config/ingest.yaml` (ships with `cameras: []`), `docs/*.md`, `tests/`.
-Phase 2 (`godseye/perception/`): see PHASE 2 below.
-NOT implemented: Phases 3–7 (no stores, query system, LLM integration, UI).
+Phase 2 (`godseye/perception/`): see PHASE 2 below. Phase 3 (`godseye/storage/`): see PHASE 3 below.
+NOT implemented: Phases 4–7 (no query system, LLM integration, UI, retrieval).
 
 # TECHNOLOGY REQUIREMENTS
 
@@ -130,7 +130,7 @@ Planned responsibilities (none created yet):
 - Filesystem clips: evidence video clips. SQLite stores paths and time ranges. Layout: NOT DESIGNED.
 
 # TEST STATUS
-Command: `.venv/bin/python -m pytest tests -q` (2026-10-08, after Phase 2): **83 passed, 1 skipped** in about 116 s (skipped = RTMP integration test, needs `GODSEYE_TEST_RTMP_URL`). Phase 1 alone: 65 passed. Phase 2 tests: see PHASE 2 TESTS.
+Command: `.venv/bin/python -m pytest tests -q` (2026-10-08, after Phase 3): **103 passed, 1 skipped** in about 123 s (Phase 3 added 20) (skipped = RTMP integration test, needs `GODSEYE_TEST_RTMP_URL`). Phase 1 alone: 65 passed. Phase 2 tests: see PHASE 2 TESTS.
 Covered: config validation, preprocessing/coordinate round-trips, sampler rates (2 fps base, ~5 fps burst, static gating, keepalive), bus policies/fairness, multi-camera isolation, real RTSP and HLS ingest, disconnect/reconnect (stream_epoch), stall recovery, invalid/missing/404 streams, max_attempts, hw_accel failure, queue pressure, loop_file, runtime add/remove, shutdown, environment failure, malformed buffers.
 NOT covered: RTMP, real cameras, hardware decode, soak/performance. No performance numbers measured.
 
@@ -165,8 +165,8 @@ Pending (need user input): LLM choice (Qwen vs Llama 3), NanoOwl/FastReID weight
 2. Phase 2 (`cctv_claude_code_prompts/03_PHASE_2_AI_PERCEPTION.md`): FIRST verify NanoOwl package/weights/inference API and torch/TensorRT on the RTX 5050 (CUDA 13.2). If unverifiable, STOP and report per the master contract. Do not substitute YOLO or another detector.
 
 # NEXT ACTION
-1. User accepts or rejects Phase 2; decides the open items in PHASE 2 LIMITATIONS (input-size spec, Re-ID data for calibration, vehicle Re-ID data).
-2. Phase 3 (`04_*`): SQLite schema + ChromaDB + clip storage consuming `EnrichedFrame`. Key by (camera_id, stream_epoch, track_id), never track_id alone. Replace `IdentityGallery` with a Chroma-backed class exposing the same `query/new/add`.
+1. User accepts or rejects Phase 3 (and Phase 2 open items: input-size spec, Re-ID calibration data, vehicle Re-ID data).
+2. Phase 4 (`05_*`): query understanding (local LLM, referent resolver, clarification). Phase 5 will read via the schema below; Phase 3 deliberately has no retrieval API except `VectorStore.search`.
 3. Still open from Phase 1: RTMP integration verification.
 
 # PHASE 2 — AI PERCEPTION (COMPLETE pending acceptance; verified 2026-10-08)
@@ -198,3 +198,30 @@ torch 2.14.1+cu130, tensorrt 11.3.0.99, transformers 5.19.0, scipy, lap, cython_
 7. Timing figures are single measurements; no soak/multi-camera load test; models are shared by one worker, so throughput across many cameras is unmeasured.
 ## PHASE 2 DECISIONS
 Per-class-group ByteTrack; conservative identity rules (merge only when clearly best, ambiguity reported not resolved); occlusion/quality gating of Re-ID crops; embedding reuse from the OWL-ViT class-embedding head; explicit `backend` (no silent torch fallback); stale engine/ONNX experiments remain in `models/nanoowl/` (safe to delete all but `owlvit-base-patch32-fp16-trt11.3.0.99-sm120-b1.engine`).
+
+# PHASE 3 — PERSISTENCE, VECTORS & EVIDENCE (COMPLETE pending acceptance; verified 2026-10-08)
+## Architecture (`godseye/storage/`, config `config/storage.yaml`, root `data/store/`)
+`EvidenceStore.write(EnrichedFrame)` (single writer thread; fcntl lock `<root>/.lock` -> second opener gets `StorageError`). Layout: `godseye.db` (SQLite WAL), `chroma/` (ChromaDB PersistentClient, telemetry off), `clips/{YYYY-MM-DD UTC}/{camera_id}/{start_ms}_{uuid8}.mp4`. Pass `store.gallery` to `PerceptionPipeline(gallery=...)`: the Chroma-backed `PersistentGallery` replaces the in-memory one, so `global_id`s now survive restarts. Call `pipeline.shutdown()` and `store.write()` its `ended_tracks`, then `store.close()` (else tracks look crash-closed on next start).
+## SQLite schema (user_version 1; `db.py`)
+`cameras`; `identities(global_id, reid_class person|vehicle, first/last_seen, last_camera)`; `clips(clip_id, camera_id, stream_epoch, start/end_ts, path relative, fps, frames, width, height, frame_ts JSON, size_bytes, sha256, status complete|missing|corrupt)`; `tracks(track_row, camera_id, stream_epoch, track_id, label, reid_class, start_ts, last_seen_ts, end_ts NULL=open, hits, global_id FK, identity_status/score/candidates, end_reason, embedding_id; UNIQUE(camera,epoch,track_id))`; `observations(obs_id, track_row FK, camera_id, frame_seq, ts, x1..y2 tracker box, dx1..dy2 detection box, confidence, label, clip_id FK, clip_frame; UNIQUE(track_row, frame_seq))`. Indexes on global_id, (camera, time), open tracks, observation (camera,ts)/(track,ts)/clip. FKs on. `track_id` and `global_id` are separate columns; tracks are keyed by (camera_id, stream_epoch, track_id).
+To play an observation: `clips.path` + `observations.clip_frame` (seek = frame index; `clips.frame_ts[i]` gives each frame's capture time; playback fps is `clip_fps` while capture is sampled at 2-5 fps, so clips play faster than real time).
+## ChromaDB collections (cosine space, deterministic ids => idempotent upserts)
+`reid_person`, `reid_vehicle` (2048-d FastReID exemplars = the identity gallery; id `{gid}:{sha1}`, metadata global_id/camera_id/ts; capped at `max_exemplars` per identity, first + newest kept); `track_clip` (512-d reused NanoOWL/CLIP track embedding; id `{camera}:{epoch}:{track}`; refreshed every `track_embed_every` hits and finalised at track end with the final global_id). Search: `VectorStore.search(name, vec, k, where)`. Gallery query takes the best exemplar per identity among the top `chroma_query_k`=100 hits.
+## Clips
+Only frames while a camera has tracks (+ `idle_close_s` after), one segment per camera shared by all its tracks (not per-track), closed on idle / `max_segment_s` / `stream_epoch` or resolution change. Frames (`original_bgr`, privacy masks already applied; store refuses unmasked originals) are piped to ffmpeg (libx264, yuv420p, faststart) into `*.part`; on close the clip is probed (ffprobe: h264, size, packet count == frames written), sha256'd, fsynced, atomically renamed, and only then are the `clips` row and `observations.clip_id` committed. No pre-roll.
+## Consistency / failure behaviour
+- Order per frame: vectors (idempotent) -> clip frame -> one SQLite transaction. Publish order for clips: media validated -> rename -> SQLite commit.
+- SQLite/Chroma failure: exception to caller, frame rolled back (nothing partial in SQLite). Clip failure (ffmpeg missing/dead, low disk `min_free_bytes`, validation): DEGRADED, not fatal -- `.part` deleted, affected observations keep `clip_id`/`clip_frame` NULL, `store.health()` (`clip_failures`, `last_clip_error`) and an ERROR log record it, camera retried after `retry_after_s`.
+- Crash: `recover()` on open deletes `.part` files, closes open tracks (`end_reason=crash_recovered`), detaches observations of unpublished clips. At most one open segment of video per camera is lost; metadata is kept.
+- `reconcile(fix=False, deep=False)` reports: clips with missing file / wrong size (/ wrong sha256 when `deep`), orphan clip files, orphan vectors (gallery vectors with no `identities` row; `track_clip` with no track), identities without vectors, tracks whose embedding is missing. `fix=True` marks clips `missing|corrupt` (never deletes referenced evidence), removes orphan files/vectors.
+- Duplicates: re-writing a frame is a no-op (UNIQUE + deterministic vector ids).
+## PHASE 3 TESTS
+`tests/test_storage.py` (18; real SQLite/Chroma/ffmpeg, synthetic perception output): clip publish + metadata consistency, frame<->time mapping, epoch split, restart persistence, vector search + persistent gallery matching across restart, exemplar cap, duplicates, single-writer lock, unsafe camera id, privacy refusal, missing ffmpeg, low disk + back-off, encoder killed mid-segment, Chroma failure, SQLite failure rollback, crash recovery, missing/corrupt/same-size-corrupt clips, orphan vectors, config. `tests/test_storage_real.py` (1): real video -> real pipeline -> store -> restart -> DB equals pipeline output, clips probe OK, `reconcile(deep=True)` clean.
+## PHASE 3 LIMITATIONS / ISSUES
+1. Not covered: real disk-full (ENOSPC) on a full filesystem (low-disk is the pre-check; encoder death is covered), power loss, concurrent readers during writes, long soak, large-scale Chroma/SQLite volume (one observation row per tracked object per sampled frame; growth rate NOT measured).
+2. Chroma and SQLite cannot be atomic: a crash can leave orphan vectors/clips (cleaned by reconcile) and a vector exists before its SQLite row. Reconcile is manual (`store.reconcile()`), not scheduled.
+3. Gallery trimming and identity lookup cost one Chroma `get`/`query` per call; the top-100 window can hide a low-scoring identity behind a crowded one (affects runner-up margin only).
+4. `ffmpeg`/`ffprobe` are runtime dependencies for clips (not covered by the GStreamer invariant; ingestion/decoding is still GStreamer). Clips are CPU-encoded (libx264 veryfast).
+5. No retention/rotation/deletion policy for clips, tracks or identities; `gallery_ttl_s` still unimplemented. Single writer only (one process).
+6. Found and fixed: `IdentityResolver(gallery=empty)` silently replaced a persistent gallery with an in-memory one (`gallery or ...` with falsy `__len__`).
+7. Frame timestamps are wall-clock capture times (Phase 1 limitation), not stream PTS.

@@ -15,3 +15,9 @@
 12. **ByteTrack per Re-ID class group**; ids per camera; reset on `stream_epoch`.
 13. **Identity merges are conservative**: threshold + margin + same-camera exclusion; ambiguity is reported, never merged.
 14. **Never `tuple(trt.Dims)`**: libunwind from GStreamer turns TensorRT's internal C++ IndexError into an abort.
+
+## Phase 3 (details in CLAUDE.md, PHASE 3)
+15. **SQLite is the source of truth; Chroma holds vectors only.** Write order vectors -> media -> SQLite commit so crashes leave orphans, never dangling references; `recover()` + `reconcile()` handle orphans.
+16. **One clip segment per camera, not per track**; observations point at (clip_id, clip_frame); published only after ffprobe validation + atomic rename.
+17. **Clip failure degrades, metadata failure raises.** Never silent: counters, ERROR log, NULL clip refs.
+18. **ffmpeg subprocess for H.264 evidence encoding** (OpenCV's writer has no H.264 here; system GStreamer has no x264enc).
