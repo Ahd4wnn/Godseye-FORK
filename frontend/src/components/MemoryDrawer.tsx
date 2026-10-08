@@ -4,7 +4,7 @@ import { useStore } from '../store'
 import { Head } from './Head'
 
 export function MemoryDrawer() {
-  const { memoryOpen, setMemoryOpen, facts, cameras, forget, restart, backend, newFactId } = useStore()
+  const { memoryOpen, setMemoryOpen, facts, cameras, forget, restart, backend, newFactId, health } = useStore()
   const [confirming, setConfirming] = useState(false)
   const restarting = backend === 'restarting'
 
@@ -61,7 +61,7 @@ export function MemoryDrawer() {
                 </AnimatePresence>
               </ul>
             )}
-            <div className="drawer__foot">
+            {health?.capabilities?.restart !== false && <div className="drawer__foot">
               {confirming ? (
                 <>
                   <p>Restart the backend? Memory should survive.</p>
@@ -73,7 +73,7 @@ export function MemoryDrawer() {
                   {restarting ? 'Restarting…' : 'Restart backend'}
                 </button>
               )}
-            </div>
+            </div>}
           </motion.aside>
         </>
       )}

@@ -330,3 +330,6 @@ button.chip--cand:hover:not(:disabled) { border-color: rgb(255 90 82 / 0.55); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+.hud__choices { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.hud__choices input { flex: 1; min-width: 200px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line, #333); background: var(--surface-3); color: inherit; font: inherit; }

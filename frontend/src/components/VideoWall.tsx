@@ -23,8 +23,9 @@ function grid(n: number, focus: boolean, w: number, h: number) {
 }
 
 export function VideoWall() {
-  const { backend, cameras, activeCameraId, processing, clarify, answerClarify, skipClarify } = useStore()
+  const { backend, cameras, activeCameraId, processing, clarify, answerClarify, answerWith, skipClarify } = useStore()
   const [view, setView] = useState<'cameras' | 'blueprint'>('cameras')
+  const [text, setText] = useState('')
   const [pick, setPick] = useState<{ camera_id: string; region?: [number, number][] } | null>(null)
   const body = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
@@ -36,17 +37,18 @@ export function VideoWall() {
     return () => ro.disconnect()
   }, [])
 
-  useEffect(() => setPick(null), [clarify?.question_id])
+  useEffect(() => { setPick(null); setText('') }, [clarify?.question_id])
+  const onWall = !!clarify && ['camera', 'region', 'entity'].includes(clarify.kind)
   useEffect(() => { if (clarify) setView('cameras') }, [clarify])
   useEffect(() => {
     if (!clarify) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') skipClarify()
-      if (e.key === 'Enter' && pick && !(e.target instanceof HTMLInputElement)) answerClarify(pick.camera_id, pick.region)
+      if (e.key === 'Enter' && onWall && pick && !(e.target instanceof HTMLInputElement)) answerClarify(pick.camera_id, pick.region)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [clarify, pick, answerClarify, skipClarify])
+  }, [clarify, onWall, pick, answerClarify, skipClarify])
 
   const focus = !clarify && cameras.some((c) => c.id === activeCameraId)
   const g = grid(cameras.length, focus, size.w, size.h)
@@ -56,7 +58,7 @@ export function VideoWall() {
     backend === 'offline' || backend === 'connecting'
       ? `Waiting for backend at ${BACKEND_LABEL}`
       : cameras.length === 0 && !processing
-        ? 'No cameras yet. Upload recordings to index them.'
+        ? 'No stored footage yet. Cameras appear once Track A has recorded clips.'
         : null
 
   return (
@@ -80,7 +82,7 @@ export function VideoWall() {
           <Blueprint />
         ) : (
           <div
-            className={`wall__grid${clarify ? ' wall__grid--teach' : ''}`}
+            className={`wall__grid${onWall ? ' wall__grid--teach' : ''}`}
             style={{ gridTemplateColumns: `repeat(${g.cols}, ${tileW}px)`, gridAutoRows: `${(tileW * 9) / 16}px`, gap: GAP }}
           >
             <LayoutGroup>
@@ -91,12 +93,12 @@ export function VideoWall() {
                   active={focus && cam.id === activeCameraId}
                   span={focus && g.span && cam.id === activeCameraId}
                   teach={
-                    clarify
+                    clarify && onWall
                       ? {
                           suggested: clarify.suggested_cameras.includes(cam.id),
                           picked: pick?.camera_id === cam.id,
                           region: pick?.camera_id === cam.id ? pick.region : undefined,
-                          drawRegion: clarify.kind === 'region',
+                          drawRegion: clarify.kind === 'region' || clarify.kind === 'entity',
                           onPick: (region) => setPick({ camera_id: cam.id, region }),
                         }
                       : undefined
@@ -123,10 +125,21 @@ export function VideoWall() {
             >
               <div>
                 <p className="hud__q">{clarify.question}</p>
-                <p className="hud__hint">{clarify.kind === 'region' ? 'Pick a camera and drag the area' : 'Pick a camera'} · Enter to confirm · Esc to skip</p>
+                {onWall && <p className="hud__hint">{clarify.kind === 'region' || clarify.kind === 'entity' ? 'Pick a camera and drag the area' : 'Pick a camera'} · Enter to confirm · Esc to skip</p>}
+                {clarify.kind === 'choice' && (
+                  <div className="hud__choices">
+                    {(clarify.options ?? []).map((o) => <button key={o.value} className="btn" onClick={() => answerWith(o.value)}>{o.label}</button>)}
+                  </div>
+                )}
+                {clarify.kind === 'text' && (
+                  <form className="hud__choices" onSubmit={(e) => { e.preventDefault(); if (text.trim()) answerWith(text.trim()) }}>
+                    <input autoFocus value={text} maxLength={500} onChange={(e) => setText(e.target.value)} aria-label="Your answer" />
+                    <button className="btn btn--primary" disabled={!text.trim()}>Send</button>
+                  </form>
+                )}
               </div>
               <button className="btn" onClick={skipClarify}>Skip</button>
-              <button className="btn btn--primary" disabled={!pick} onClick={() => pick && answerClarify(pick.camera_id, pick.region)}>Confirm</button>
+              {onWall && <button className="btn btn--primary" disabled={!pick} onClick={() => pick && answerClarify(pick.camera_id, pick.region)}>Confirm</button>}
             </motion.div>
           )}
           {processing && !clarify && (

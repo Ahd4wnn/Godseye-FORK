@@ -81,7 +81,7 @@ def site(world, embedder):
 
 
 def test_authentication_and_login_cookie(site):
-    for path in ("/", "/api/cameras", "/media/clip/1", "/api/clip/1", "/api/frame/1/0.jpg"):
+    for path in ("/", "/api/legacy/cameras", "/media/clip/1", "/api/clip/1", "/api/frame/1/0.jpg"):
         assert site.req("GET", path, auth=False)[0] == 401, path
     assert site.req("POST", "/api/chat", {"text": "x"}, auth=False)[0] == 401
     assert site.req("GET", "/", headers={"Authorization": "Bearer wrong"}, auth=False)[0] == 401
@@ -94,8 +94,8 @@ def test_authentication_and_login_cookie(site):
 
 
 def test_dns_rebinding_and_csrf_defences(site):
-    assert site.req("GET", "/api/cameras", host="evil.example.com")[0] == 403
-    assert site.req("GET", "/api/cameras", host=f"127.0.0.1:{site.port + 1}")[0] == 403
+    assert site.req("GET", "/api/legacy/cameras", host="evil.example.com")[0] == 403
+    assert site.req("GET", "/api/legacy/cameras", host=f"127.0.0.1:{site.port + 1}")[0] == 403
     assert site.req("POST", "/api/chat", {"text": "x"}, headers={"X-Requested-With": ""})[0] == 403
     assert site.req("POST", "/api/chat", {"text": "x"}, headers={"Origin": "http://evil.example.com"})[0] == 403
     st, _, _ = site.req("POST", "/api/chat", {"text": "show cars"}, headers={"Origin": f"http://127.0.0.1:{site.port}"})
@@ -211,7 +211,7 @@ def test_frame_endpoint_returns_jpeg(site):
     st, h, body = site.req("GET", f"/api/frame/{row['clip_id']}/1.jpg")
     assert st == 200 and h["Content-Type"] == "image/jpeg" and body[:2] == b"\xff\xd8"
     assert site.req("GET", f"/api/frame/{row['clip_id']}/{row['frames']}.jpg")[0] == 404
-    cams = json.loads(site.req("GET", "/api/cameras")[2])["cameras"]
+    cams = json.loads(site.req("GET", "/api/legacy/cameras")[2])["cameras"]
     assert {c["camera_id"] for c in cams} == {"lobby_cam", "cam2", "north_gate"}
     meta = json.loads(site.req("GET", f"/api/clip/{cams[0]['clip_id']}")[2])
     assert len(meta["frame_ts"]) == meta["frames"]

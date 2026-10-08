@@ -1,7 +1,7 @@
 // BACKEND: keep the FastAPI Pydantic models identical to these types (field names and units).
 // Mirrors the backend contract in README.md. `t` = seconds into that camera's video, `wall` = ISO 8601 UTC.
 
-export type Health = { ok: boolean; index_size: number; facts: number; cameras_online: number }
+export type Health = { ok: boolean; index_size: number; facts: number; cameras_online: number; capabilities?: { upload: boolean; restart: boolean } }
 // Blueprint the backend infers from the footage (normalised 0–1 coordinates). Read-only in the UI.
 export type SiteLayout = {
   aspect?: number // width / height of the blueprint, default 1.6
@@ -16,7 +16,8 @@ export type Camera = {
   video_url: string
   thumb_url: string
   fps: number
-  duration_s: number
+  duration_s: number // wall-clock span of the recording
+  video_s?: number // length of the video file when it differs from the wall span (sampled capture played at a fixed fps)
   start_wall: string
 }
 
@@ -48,7 +49,7 @@ export type QueryEvent =
   | { event: 'stage'; data: { name: string; ms: number; detail?: string } }
   | { event: 'progress'; data: Progress }
   | { event: 'candidates'; data: { items: Candidate[] } }
-  | { event: 'clarify'; data: { question_id: string; question: string; referent: string; kind: 'camera' | 'region' | 'entity'; suggested_cameras: string[] } }
+  | { event: 'clarify'; data: { question_id: string; question: string; referent: string; kind: 'camera' | 'region' | 'entity' | 'choice' | 'text'; suggested_cameras: string[]; options?: { value: string; label: string }[] } }
   | { event: 'answer'; data: { text: string; hits: Hit[]; memory_used: string[] } }
   | { event: 'error'; data: { message: string } }
   | { event: 'done'; data: { total_ms: number; stages: Record<string, number> } }

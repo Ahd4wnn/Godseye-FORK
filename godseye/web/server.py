@@ -6,6 +6,7 @@ from __future__ import annotations
 import hmac
 import json
 import logging
+import mimetypes
 import os
 import re
 import secrets
@@ -19,6 +20,7 @@ from urllib.parse import parse_qs, urlparse
 
 from ..runtime.trackb import QueryService
 from .assets import CSS, INDEX, JS
+from .frontend_api import FrontendApi
 
 log = logging.getLogger("godseye.web")
 MAX_BODY = 8192
@@ -40,8 +42,9 @@ def load_or_create_token(path: Path) -> str:
 
 
 class WebApp:
-    def __init__(self, qs: QueryService, store_root: Path, token: str, chat_per_min: int = 30):
+    def __init__(self, qs: QueryService, store_root: Path, token: str, chat_per_min: int = 30, dist: Path | None = None):
         self.qs, self.root, self.token = qs, store_root, token
+        self.dist = dist.resolve() if dist is not None and (dist / "index.html").is_file() else None      # built React console, if present
         self.clips_dir = (store_root / "clips").resolve()
         self.db = sqlite3.connect(f"file:{store_root / 'godseye.db'}?mode=ro", uri=True, timeout=10, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
@@ -49,6 +52,7 @@ class WebApp:
         self._mu = threading.Lock()
         self._hits: dict[str, deque] = defaultdict(deque)
         self.chat_per_min = chat_per_min
+        self.fe = FrontendApi(self)
 
     def authed(self, cookie_header: str | None, auth_header: str | None) -> bool:
         cand = None
@@ -196,8 +200,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, CSS.encode(), "text/css; charset=utf-8")
         if not self._auth():
             return
-        if u.path == "/":
+        if u.path == "/legacy":
             return self._send(200, INDEX.encode(), "text/html; charset=utf-8")
+        if u.path == "/" and self.app.dist is None:
+            return self._send(200, INDEX.encode(), "text/html; charset=utf-8")
+        fe = {"/api/health": self.app.fe.health, "/api/site": self.app.fe.site, "/api/cameras": self.app.fe.cameras, "/api/memory": self.app.fe.facts}
+        if u.path in fe:
+            return self._json(200, fe[u.path]())
         m = re.fullmatch(r"/media/clip/(\d{1,9})", u.path)
         if m:
             return self._media(int(m[1]))
@@ -211,17 +220,85 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(404, {"error": "no such clip"})
             d = dict(r[0]); d["frame_ts"] = json.loads(d["frame_ts"])
             return self._json(200, d)
-        if u.path == "/api/cameras":
+        if u.path == "/api/legacy/cameras":
             rows = self.app.q("SELECT c.camera_id, (SELECT clip_id FROM clips k WHERE k.camera_id=c.camera_id AND k.status='complete' ORDER BY end_ts DESC LIMIT 1) AS clip_id "
                               "FROM cameras c ORDER BY c.camera_id")
             return self._json(200, {"cameras": [dict(r) for r in rows if r["clip_id"] is not None]})
+        if self.app.dist is not None and not u.path.startswith("/api/"):
+            return self._static(u.path)
         self._json(404, {"error": "not found"})
+
+    def _static(self, path: str):
+        """The built console: only files under frontend/dist; unknown paths fall back to index.html (client-side app)."""
+        p = (self.app.dist / path.lstrip("/")).resolve() if path != "/" else self.app.dist / "index.html"
+        if not (p.is_file() and p.is_relative_to(self.app.dist)):
+            if "." in path.rsplit("/", 1)[-1]:
+                return self._json(404, {"error": "not found"})
+            p = self.app.dist / "index.html"
+        ctype = mimetypes.guess_type(p.name)[0] or "application/octet-stream"
+        cache = "no-store" if p.name == "index.html" else "private, max-age=31536000, immutable"
+        self._send(200, p.read_bytes(), ctype + ("; charset=utf-8" if ctype.startswith("text/") or ctype.endswith("javascript") else ""), {"Cache-Control": cache})
+
+    def do_DELETE(self):
+        try:
+            if not self._guard(True) or not self._auth():
+                return
+            m = re.fullmatch(r"/api/memory/([^/]{1,200})", urlparse(self.path).path)
+            if not m:
+                return self._json(404, {"error": "not found"})
+            from urllib.parse import unquote
+            if not self.app.fe.forget(unquote(m[1])):
+                return self._json(404, {"error": "no such fact"})
+            self.send_response(204)
+            self.send_header("Content-Length", "0")
+            self._hdrs()
+            self.end_headers()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        except Exception:                            # noqa: BLE001
+            log.exception("DELETE failed")
+            self._json(500, {"error": "internal error"})
+
+    def _sse(self, body: dict):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Connection", "close")
+        self._hdrs({"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+        self.end_headers()
+        self.close_connection = True
+
+        def emit(event, data):
+            self.wfile.write(f"event: {event}\ndata: {json.dumps(data)}\n\n".encode())
+            self.wfile.flush()
+        stop = threading.Event()
+
+        def beat():                                  # keep-alive comments while the (slow) LLM works
+            while not stop.wait(10):
+                try:
+                    self.wfile.write(b": keep-alive\n\n"); self.wfile.flush()
+                except OSError:
+                    return
+        threading.Thread(target=beat, daemon=True).start()
+        try:
+            self.app.fe.query(body, emit)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        except ValueError as e:
+            emit("error", {"message": f"bad request: {str(e)[:100]}"})
+        except Exception:                            # noqa: BLE001
+            log.exception("query stream failed")
+            emit("error", {"message": "internal error"})
+        finally:
+            stop.set()
 
     def do_POST(self):
         try:
             if not self._guard(True) or not self._auth():
                 return
-            if urlparse(self.path).path != "/api/chat":
+            path = urlparse(self.path).path
+            if path in ("/api/videos", "/api/videos/links", "/api/admin/restart"):
+                return self._json(501, {"error": "not available in Godseye: cameras are ingested by Track A (config/ingest.yaml); restart the services from the shell"})
+            if path not in ("/api/chat", "/api/query", "/api/clarify"):
                 return self._json(404, {"error": "not found"})
             n = int(self.headers.get("Content-Length") or 0)
             if not 0 < n <= MAX_BODY:
@@ -231,7 +308,17 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(self.rfile.read(n))
             if not isinstance(body, dict):
                 raise ValueError("body must be an object")
+            if path == "/api/query":
+                return self._sse(body)
+            if path == "/api/clarify":
+                fact = self.app.fe.clarify(body)
+                if fact is None:
+                    self.send_response(204); self.send_header("Content-Length", "0"); self._hdrs(); self.end_headers()
+                    return
+                return self._json(200, fact)
             self._json(200, self.app.chat(body))
+        except LookupError as e:
+            self._json(404, {"error": str(e)})
         except (ValueError, json.JSONDecodeError) as e:
             self._json(400, {"error": f"bad request: {str(e)[:100]}"})
         except (BrokenPipeError, ConnectionResetError):
@@ -321,8 +408,9 @@ def serve(rcfg, host: str = "127.0.0.1", port: int = 8080) -> int:
     root = Path(load_query(ROOT / rcfg.query).store_root)
     root = root if root.is_absolute() else ROOT / root
     tok = load_or_create_token(root / "web_token")
-    srv = make_server(WebApp(qs, root, tok), port, host)
-    print(f"Godseye web chat: http://{host}:{port}/?token={tok}   (token file: {root / 'web_token'}, mode 0600)")
+    srv = make_server(WebApp(qs, root, tok, dist=ROOT / "frontend" / "dist"), port, host)
+    ui = "frontend/dist (React console; old UI at /legacy)" if (ROOT / "frontend" / "dist" / "index.html").is_file() else "legacy UI (run `npm run build` in frontend/ for the React console)"
+    print(f"Godseye web chat, {ui}: http://{host}:{port}/?token={tok}   (token file: {root / 'web_token'}, mode 0600)", flush=True)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

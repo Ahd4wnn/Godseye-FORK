@@ -50,6 +50,7 @@ type State = {
   boot: () => void
   ask: (text: string) => Promise<void>
   answerClarify: (camera_id: string, region?: [number, number][]) => Promise<void>
+  answerWith: (response: string) => Promise<void>
   skipClarify: () => Promise<void>
   upload: (source: UploadSource) => Promise<void>
   forget: (id: string) => Promise<void>
@@ -202,10 +203,24 @@ export const useStore = create<State>((set, get) => {
       set({ clarify: null })
       try {
         // BACKEND: POST /api/clarify { question_id, camera_id, region? } → Fact; persist it so it survives a restart.
-        const fact = await api.post<Fact>('/clarify', { question_id: q.question_id, camera_id, region })
+        const fact = await api.post<Fact>('/clarify', { question_id: q.question_id, camera_id, region, wall: get().wall === null ? undefined : get().wall! / 1000 })
         const cam = get().cameras.find((c) => c.id === camera_id)
         set((s) => ({ facts: [fact, ...s.facts.filter((f) => f.id !== fact.id)], newFactId: fact.id }))
         say({ kind: 'learned', text: `Learned: ${fact.referent} = ${cam?.name ?? camera_id}` })
+      } catch (err) {
+        set({ clarify: q })
+        say({ kind: 'error', text: (err as Error).message })
+      }
+    },
+
+    async answerWith(response) {
+      const q = get().clarify
+      if (!q) return
+      set({ clarify: null })
+      try {
+        // BACKEND: POST /api/clarify { question_id, response } for choice / free-text questions.
+        const fact = await api.post<Fact>('/clarify', { question_id: q.question_id, response })
+        if (fact && !fact.id.startsWith('ephemeral:')) set((s) => ({ facts: [fact, ...s.facts.filter((f) => f.id !== fact.id)], newFactId: fact.id }))
       } catch (err) {
         set({ clarify: q })
         say({ kind: 'error', text: (err as Error).message })

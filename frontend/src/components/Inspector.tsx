@@ -184,7 +184,7 @@ function Activity() {
 }
 
 // BACKEND: fps and duration_s must be the real stream metadata (e.g. from ffprobe) or these counts are wrong.
-const frameCount = (c: Camera) => Math.round(c.fps * c.duration_s)
+const frameCount = (c: Camera) => Math.round(c.fps * (c.video_s ?? c.duration_s))
 
 function Footage() {
   const cameras = useStore((s) => s.cameras)
@@ -206,7 +206,7 @@ function Footage() {
               <span role="cell">{c.name}</span>
               <span role="cell">{frameCount(c).toLocaleString()}</span>
               <span role="cell">{+c.fps.toFixed(2)}</span>
-              <span role="cell">{duration(c.duration_s)}</span>
+              <span role="cell">{duration(c.video_s ?? c.duration_s)}</span>
             </div>
           ))}
         </div>

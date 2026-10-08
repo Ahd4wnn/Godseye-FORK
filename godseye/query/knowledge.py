@@ -93,5 +93,19 @@ class KnowledgeStore:
     def zone_names(self) -> list[str]:
         return sorted({r[0] for r in self.conn.execute("SELECT name FROM zones")})
 
+    @_locked
+    def fact_rows(self) -> list[dict]:
+        """Everything the user taught the system, for the console's memory panel (read-only view)."""
+        out = [dict(r) for r in self.conn.execute("SELECT kind,alias,target,source,created_ts FROM aliases WHERE kind IN ('camera','identity') ORDER BY created_ts DESC")]
+        out += [{"kind": "zone", **dict(r)} for r in self.conn.execute("SELECT camera_id,name,x1,y1,x2,y2,created_ts FROM zones ORDER BY created_ts DESC")]
+        return out
+
+    @_locked
+    def forget_zone(self, camera_id: str, name: str) -> int:
+        with self.conn:
+            n = self.conn.execute("DELETE FROM zones WHERE camera_id=? AND name=?", (camera_id, norm(name))).rowcount
+            self.conn.execute("DELETE FROM aliases WHERE kind='zone' AND alias=? AND scope=?", (norm(name), camera_id))
+        return n
+
     def close(self) -> None:
         self.conn.close()

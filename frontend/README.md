@@ -1,6 +1,17 @@
 # Gods Eye: frontend
 
-React + Vite + TypeScript, Zustand (one shared store), Motion. There is no mock data: every pixel comes from the FastAPI backend, and when it is down the UI shows an offline state.
+React + Vite + TypeScript, Zustand (one shared store), Motion. There is no mock data: every pixel comes from the Godseye web server (`godseye/web/`), and when it is down the UI shows an offline state.
+
+## Running it with Godseye (this repo)
+
+```bash
+cd frontend && npm ci && npm run build      # produces frontend/dist
+cd .. && .venv/bin/python -m godseye.runtime web   # serves the console + /api on 127.0.0.1:8080; open the printed login link
+```
+
+The server (`godseye/web/server.py` + `frontend_api.py`) implements the contract below on top of Track B and keeps its security model (loopback only, token cookie, Host/Origin/`X-Requested-With` checks, media by `clip_id`). The old single-file chat UI is still at `/legacy`. For `npm run dev`, log in once at `http://127.0.0.1:8080/?token=...` (cookies are shared across ports) and Vite proxies `/api` to it.
+
+Differences from the contract (see `docs/FRONTEND.md`): upload / links / restart return 501 and the UI hides those buttons (`health.capabilities`); `site.layout` is absent (no invented blueprint); `candidates`/`progress` events are not emitted (the pipeline does not report them); `Camera.video_s` is added (clips are sampled captures, so video length differs from the wall-clock span); clarifications of kind `choice` / `text` are added alongside `camera` / `region` / `entity`.
 
 ## Run
 

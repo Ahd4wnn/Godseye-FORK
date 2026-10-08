@@ -18,6 +18,10 @@ describe('time model', () => {
     expect(videoTime(b, w)).toBe(60)
     expect(videoTime(b, Date.parse('2026-10-08T14:01:00Z'))).toBeNull()
     expect(wallOf(b, 60)).toBe(w)
+    // sampled capture: 10 s of wall time stored as a 20 s video -> video time runs twice as fast as the wall clock
+    const s = { ...a, duration_s: 10, video_s: 20 }
+    expect(videoTime(s, Date.parse(s.start_wall) + 5000)).toBe(10)
+    expect(wallOf(s, 10)).toBe(Date.parse(s.start_wall) + 5000)
   })
   it('formats', () => {
     expect(clock(Date.parse('2026-10-08T14:22:07.400Z'), true)).toBe('14:22:07.400')

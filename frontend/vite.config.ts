@@ -7,7 +7,7 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     server: {
       // FastAPI serves every route under /api, so no rewrite and no CORS in dev.
-      proxy: { '/api': { target: env.VITE_BACKEND_URL || 'http://localhost:8000', changeOrigin: true } },
+      proxy: { '/api': { target: env.VITE_BACKEND_URL || 'http://127.0.0.1:8080', changeOrigin: true } },
     },
   }
 })

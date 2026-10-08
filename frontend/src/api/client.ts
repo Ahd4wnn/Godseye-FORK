@@ -2,14 +2,16 @@ import { sseParser, type RawEvent } from './sse'
 
 // BACKEND: FastAPI serves every route under APIRouter(prefix="/api"); Vite proxies /api in dev (vite.config.ts).
 export const API = '/api'
+// Godseye's server refuses state-changing requests without this header (CSRF defence).
+const CSRF = { 'X-Requested-With': 'godseye' }
 // BACKEND: set VITE_BACKEND_URL in frontend/.env if FastAPI is not on localhost:8000.
-export const BACKEND_LABEL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
+export const BACKEND_LABEL = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8080'
 
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   const isForm = body instanceof FormData
   const res = await fetch(API + path, {
     method,
-    headers: body && !isForm ? { 'Content-Type': 'application/json' } : undefined,
+    headers: { ...CSRF, ...(body && !isForm ? { 'Content-Type': 'application/json' } : {}) },
     body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
   })
   if (!res.ok) throw new Error(`${method} ${path} → ${res.status} ${await res.text().catch(() => '')}`.trim())
@@ -29,6 +31,7 @@ export function postForm<T>(path: string, form: FormData, onProgress: (sent: num
     const xhr = new XMLHttpRequest()
     xhr.open('POST', API + path)
     xhr.responseType = 'json'
+    xhr.setRequestHeader('X-Requested-With', 'godseye')
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total)
     xhr.onload = () => (xhr.status < 300 ? resolve(xhr.response) : reject(new Error(`POST ${path} → ${xhr.status}`)))
     xhr.onerror = () => reject(new Error(`POST ${path} → network error`))
@@ -40,7 +43,7 @@ export function postForm<T>(path: string, form: FormData, onProgress: (sent: num
 export async function stream<E extends RawEvent>(path: string, onEvent: (e: E) => void, opts: { body?: unknown; signal?: AbortSignal } = {}) {
   const res = await fetch(API + path, {
     method: opts.body === undefined ? 'GET' : 'POST',
-    headers: { Accept: 'text/event-stream', ...(opts.body !== undefined && { 'Content-Type': 'application/json' }) },
+    headers: { ...CSRF, Accept: 'text/event-stream', ...(opts.body !== undefined && { 'Content-Type': 'application/json' }) },
     body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
     signal: opts.signal,
   })

@@ -14,10 +14,11 @@ export function span(cams: Camera[]): [number, number] | null {
 /** Seconds into the camera's video for a wall time, or null if the camera wasn't recording then. */
 export function videoTime(cam: Camera, wall: number): number | null {
   const t = (wall - ms(cam.start_wall)) / 1000
-  return t < 0 || t > cam.duration_s ? null : t
+  return t < 0 || t > cam.duration_s ? null : t * scale(cam)
 }
 
-export const wallOf = (cam: Camera, t: number) => ms(cam.start_wall) + t * 1000
+const scale = (cam: Camera) => (cam.video_s && cam.duration_s ? cam.video_s / cam.duration_s : 1)
+export const wallOf = (cam: Camera, t: number) => ms(cam.start_wall) + (t / scale(cam)) * 1000
 
 /** 14:22:07 in UTC */
 export const clock = (wall: number, withMs = false) => new Date(wall).toISOString().slice(11, withMs ? 23 : 19)

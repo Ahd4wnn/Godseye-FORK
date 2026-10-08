@@ -55,7 +55,7 @@ function clarify(m, c){
 }
 async function picker(c){
   const p = $('picker'); p.hidden = false; p.replaceChildren();
-  const cams = (await api('/api/cameras')).cameras.filter(x => !c.camera_id || x.camera_id === c.camera_id);
+  const cams = (await api('/api/legacy/cameras')).cameras.filter(x => !c.camera_id || x.camera_id === c.camera_id);
   if (!cams.length){ p.appendChild(el('div','msg error','No recorded video is available to click on yet.')); return; }
   const cam = cams[0], clip = await api(`/api/clip/${cam.clip_id}`);
   let n = Math.floor(clip.frames / 2), first = null;

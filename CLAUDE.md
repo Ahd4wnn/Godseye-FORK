@@ -349,3 +349,10 @@ Knowledge store, local LLM (qwen3:8b, approved deviation), referent resolver, cl
 * Test-count figures in per-phase notes are approximate; the pytest total above is authoritative.
 ## NEXT ACTION
 Commit Phase 6/7 (user to say so), then supply the blocker inputs above. STOP per the Phase 7 contract.
+
+# FRONTEND CONSOLE (branch `frontend`, after Phase 7; verified 2026-10-08)
+React + Vite + TypeScript console (`frontend/`, built to `frontend/dist`) is served by `python -m godseye.runtime web` together with the `/api` contract of `frontend/README.md`, implemented in `godseye/web/frontend_api.py` on top of the unchanged Track B (QueryService). The old single-file chat remains at `/legacy` (its camera endpoint moved to `/api/legacy/cameras`). Details and mapping: `docs/FRONTEND.md`.
+* Security model unchanged and extended to the new routes: loopback only, token cookie, Host/Origin + `X-Requested-With` on writes (the frontend client sends it), media by `clip_id`, static files confined to `frontend/dist`. External font CDN removed from the frontend.
+* Not provided (501, hidden in the UI via `health.capabilities`): video upload/links, backend restart. No `site.layout` (no invented floor plan), no progress/candidate events. Clarification kinds `choice`/`text` added to the UI for multiple-choice and free-text questions.
+* Verified: `tests/test_web_frontend.py` (6) + full suite **228 passed, 1 skipped** (RTMP); frontend `npm test` 5 passed, `tsc -b` clean; driven in headless Chromium against the live server (login, camera wall, query, evidence video with boxes, clarification by tile pick learned into memory, memory panel): no console errors. This supersedes "web UI JavaScript not exercised in a browser" for the new console only (the legacy page was not browser-tested).
+* Limits: tile playhead uses a linear wall<->video map (approximate for sampled capture; evidence player/boxes are exact); only each camera's newest clip is on the wall; no TLS; all Phase 7 verdicts (NOT READY) stand.
