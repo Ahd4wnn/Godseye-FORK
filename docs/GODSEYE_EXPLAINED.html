@@ -1,0 +1,1200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Godseye Explained</title>
+<meta name="description" content="Godseye architecture, models and storage layer explained from the source code: every table, column, vector collection and clip file.">
+<style>
+:root{
+  --bg:#f6f5f1;--surface:#ffffff;--surface2:#efede7;--text:#1d1c1a;--muted:#5f5c55;--border:#dcd8cf;
+  --code:#f2efe8;--link:#3d5fb0;
+  --c1:#c2413b;--c1s:#fbe9e7;--c2:#2d8656;--c2s:#e4f3ea;--c3:#6a4fc4;--c3s:#eeeafb;--c4:#bf6f16;--c4s:#fcefdc;--c5:#2f6aae;--c5s:#e3edf8;
+  --warn:#8a5300;--warns:#fff3dc;--bad:#a8322c;--bads:#fce8e6;--ok:#23764a;--oks:#e2f3e9;
+  --shadow:0 1px 2px rgba(0,0,0,.05),0 2px 8px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#141413;--surface:#1c1c1a;--surface2:#262522;--text:#ecebe5;--muted:#a9a69d;--border:#3a3935;--code:#24231f;--link:#8fb0f0;
+  --c1:#ec7d76;--c1s:#3a2220;--c2:#6cc495;--c2s:#1d3327;--c3:#a995f0;--c3s:#2a2440;--c4:#eba55a;--c4s:#3a2b18;--c5:#7eaee6;--c5s:#1b2a3c;
+  --warn:#f0bd6a;--warns:#3a2e17;--bad:#f08b84;--bads:#3b2120;--ok:#73cf9c;--oks:#1c3326;--shadow:none;}}
+:root[data-theme="dark"]{
+  --bg:#141413;--surface:#1c1c1a;--surface2:#262522;--text:#ecebe5;--muted:#a9a69d;--border:#3a3935;--code:#24231f;--link:#8fb0f0;
+  --c1:#ec7d76;--c1s:#3a2220;--c2:#6cc495;--c2s:#1d3327;--c3:#a995f0;--c3s:#2a2440;--c4:#eba55a;--c4s:#3a2b18;--c5:#7eaee6;--c5s:#1b2a3c;
+  --warn:#f0bd6a;--warns:#3a2e17;--bad:#f08b84;--bads:#3b2120;--ok:#73cf9c;--oks:#1c3326;--shadow:none;}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:16px}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;-webkit-text-size-adjust:100%}
+a{color:var(--link)}
+code,pre,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:.86em}
+code{background:var(--code);padding:.08em .35em;border-radius:4px;word-break:break-word}
+pre{background:var(--code);padding:12px 14px;border-radius:8px;overflow-x:auto;line-height:1.45;border:1px solid var(--border)}
+pre code{background:none;padding:0}
+h1,h2,h3,h4{line-height:1.25;margin:1.6em 0 .5em}
+h1{font-size:2.1rem;margin:0 0 .3em;letter-spacing:-.01em}
+h2{font-size:1.6rem;padding-top:.6em;border-top:1px solid var(--border)}
+h3{font-size:1.22rem}
+h4{font-size:1.02rem;margin-top:1.2em}
+p{margin:.55em 0}
+ul,ol{padding-left:1.3em}
+li{margin:.25em 0}
+.layout{display:grid;grid-template-columns:250px minmax(0,1fr);gap:36px;max-width:1280px;margin:0 auto;padding:24px 24px 80px}
+nav.toc{position:sticky;top:16px;align-self:start;max-height:calc(100vh - 32px);overflow:auto;font-size:.88rem;padding-right:6px}
+nav.toc .tt{font-weight:700;margin-bottom:6px}
+nav.toc ol{list-style:none;padding:0;margin:0}
+nav.toc li{margin:0}
+nav.toc a{display:block;padding:3px 8px;border-radius:6px;color:var(--muted);text-decoration:none}
+nav.toc a:hover{background:var(--surface2);color:var(--text)}
+nav.toc a.on{background:var(--surface2);color:var(--text);font-weight:600}
+nav.toc ol ol a{padding-left:20px;font-size:.84rem}
+.mobile-toc{display:none}
+main{min-width:0}
+.hero{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px 26px;box-shadow:var(--shadow)}
+.hero p.lead{font-size:1.08rem;color:var(--muted);max-width:62em}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.chip{background:var(--surface2);border:1px solid var(--border);border-radius:999px;padding:3px 11px;font-size:.84rem}
+.themebtn{float:right;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font:inherit;font-size:.82rem;cursor:pointer}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin:14px 0;box-shadow:var(--shadow)}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.grid2>.card,.grid3>.card{margin:0}
+.note,.warn,.bad,.good{border-radius:10px;padding:12px 15px;margin:14px 0;border:1px solid transparent}
+.note{background:var(--c5s);border-color:color-mix(in srgb,var(--c5) 30%,transparent)}
+.warn{background:var(--warns);border-color:color-mix(in srgb,var(--warn) 35%,transparent)}
+.bad{background:var(--bads);border-color:color-mix(in srgb,var(--bad) 35%,transparent)}
+.good{background:var(--oks);border-color:color-mix(in srgb,var(--ok) 35%,transparent)}
+.say{border-left:4px solid var(--c3);background:var(--c3s);padding:10px 14px;border-radius:0 10px 10px 0;margin:12px 0}
+.say::before{content:"Say it like this: ";font-weight:700}
+.tblwrap{overflow-x:auto;margin:12px 0;border:1px solid var(--border);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--border)}
+th{background:var(--surface2);font-weight:650;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+td code{white-space:nowrap}
+td.wrap code{white-space:normal}
+.k{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-weight:650;white-space:nowrap}
+.tag{display:inline-block;font-size:.72rem;font-weight:700;padding:1px 7px;border-radius:999px;margin-right:4px;vertical-align:1px;white-space:nowrap}
+.t-pk{background:var(--c4s);color:var(--c4)}.t-fk{background:var(--c5s);color:var(--c5)}.t-ix{background:var(--c2s);color:var(--c2)}.t-null{background:var(--surface2);color:var(--muted)}
+.sev-h{background:var(--bads);color:var(--bad)}.sev-m{background:var(--warns);color:var(--warn)}.sev-l{background:var(--surface2);color:var(--muted)}
+.s1{--c:var(--c1);--cs:var(--c1s)}.s2{--c:var(--c2);--cs:var(--c2s)}.s3{--c:var(--c3);--cs:var(--c3s)}.s4{--c:var(--c4);--cs:var(--c4s)}.s5{--c:var(--c5);--cs:var(--c5s)}
+.secbadge{display:inline-block;background:var(--c);color:#fff;border-radius:7px;padding:2px 10px;font-size:.8rem;font-weight:700;letter-spacing:.02em;margin-bottom:4px}
+:root[data-theme="dark"] .secbadge{color:#141413}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .secbadge{color:#141413}}
+/* pipeline replica */
+.pipe{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:14px 0}
+.stage{border:1.5px dashed var(--c);border-radius:12px;padding:10px;background:var(--surface)}
+.stage>.hd{background:var(--c);color:#fff;font-weight:700;border-radius:7px;padding:4px 10px;font-size:.88rem;margin-bottom:8px}
+:root[data-theme="dark"] .stage>.hd{color:#141413}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .stage>.hd{color:#141413}}
+.box{background:var(--cs);border:1px solid color-mix(in srgb,var(--c) 40%,transparent);border-radius:8px;padding:7px 9px;margin:6px 0;font-size:.86rem;line-height:1.4}
+.box b{display:block}
+.box .src{display:block;color:var(--muted);font-size:.78rem;margin-top:2px}
+.flowlbl{font-size:.8rem;color:var(--muted);text-align:center;margin:4px 0}
+.pathtitle{font-weight:700;margin:18px 0 4px;font-size:.95rem}
+.pathtitle.w{color:var(--c1)}.pathtitle.r{color:var(--c5)}
+/* steps */
+ol.steps{counter-reset:s;list-style:none;padding:0}
+ol.steps>li{counter-increment:s;position:relative;padding:10px 12px 10px 48px;margin:8px 0;background:var(--surface);border:1px solid var(--border);border-radius:10px}
+ol.steps>li::before{content:counter(s);position:absolute;left:12px;top:10px;width:26px;height:26px;border-radius:50%;background:var(--c3);color:#fff;font-weight:700;font-size:.85rem;display:flex;align-items:center;justify-content:center}
+.mismatch{display:grid;grid-template-columns:1fr 1fr 1.15fr;gap:0;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin:14px 0;background:var(--surface)}
+.mismatch>div{padding:12px 14px;border-right:1px solid var(--border)}
+.mismatch>div:last-child{border-right:none}
+.mismatch .h{font-size:.74rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:4px}
+.mismatch .title{grid-column:1/-1;background:var(--surface2);border-right:none;border-bottom:1px solid var(--border);font-weight:700}
+.hdt{fill:#fff}
+:root[data-theme="dark"] .hdt{fill:#141413}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .hdt{fill:#141413}}
+svg text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.er{width:100%;min-width:900px;height:auto;display:block}
+.calc{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.calc input,.calc textarea{width:100%;font:inherit;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem;padding:7px 9px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text)}
+.calc label{font-size:.84rem;color:var(--muted)}
+.out{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88rem;background:var(--code);border-radius:8px;padding:10px 12px;margin-top:10px;word-break:break-all;white-space:pre-wrap}
+details.qa{background:var(--surface);border:1px solid var(--border);border-radius:10px;margin:8px 0;padding:0 14px}
+details.qa summary{cursor:pointer;font-weight:650;padding:11px 0;list-style-position:outside}
+details.qa[open] summary{border-bottom:1px solid var(--border);margin-bottom:8px}
+details.qa>div{padding-bottom:12px}
+.tree{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.85rem;line-height:1.55;background:var(--code);border:1px solid var(--border);border-radius:10px;padding:12px 14px;overflow-x:auto;white-space:pre}
+.tree .c{color:var(--muted)}
+.muted{color:var(--muted)}
+.small{font-size:.86rem}
+footer{margin-top:50px;color:var(--muted);font-size:.85rem;border-top:1px solid var(--border);padding-top:14px}
+@media (max-width:1000px){
+  .layout{grid-template-columns:minmax(0,1fr);padding:16px 16px 60px;gap:0}
+  nav.toc{display:none}
+  .mobile-toc{display:block;margin:14px 0}
+  .mobile-toc summary{cursor:pointer;font-weight:650;padding:8px 0}
+  .mobile-toc a{display:block;padding:3px 0}
+  .pipe,.grid3{grid-template-columns:minmax(0,1fr)}
+  .grid2,.calc{grid-template-columns:minmax(0,1fr)}
+  .mismatch{grid-template-columns:minmax(0,1fr)}
+  .mismatch>div{border-right:none;border-bottom:1px solid var(--border)}
+  .mismatch>div:last-child{border-bottom:none}
+  h1{font-size:1.6rem}
+  .tblwrap table{min-width:720px}
+  h2{font-size:1.35rem}
+}
+@media print{nav.toc,.mobile-toc,.themebtn{display:none}.layout{display:block}details.qa{break-inside:avoid}details.qa>div{display:block}}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="toc" id="toc" aria-label="Contents">
+  <div class="tt">Contents</div>
+  <ol>
+    <li><a href="#fix">0 · Fix before the jury</a></li>
+    <li><a href="#big">1 · The big picture</a></li>
+    <li><a href="#capture">2 · Capture &amp; prepare</a></li>
+    <li><a href="#see">3 · See (AI perception)</a></li>
+    <li><a href="#models">4 · Models &amp; the tech behind them</a></li>
+    <li><a href="#remember">5 · Remember: storage deep dive</a>
+      <ol>
+        <li><a href="#disk">5.1 What is on disk</a></li>
+        <li><a href="#glance">5.2 The four stores at a glance</a></li>
+        <li><a href="#why">5.3 Why not one database?</a></li>
+        <li><a href="#primer">5.4 Primer: vectors, float32, cosine, HNSW, SHA-256</a></li>
+        <li><a href="#er">5.5 Relationship diagram</a></li>
+        <li><a href="#sqlite">5.6 godseye.db, every column</a></li>
+        <li><a href="#indexes">5.7 Indexes &amp; settings</a></li>
+        <li><a href="#chroma">5.8 ChromaDB collections</a></li>
+        <li><a href="#clips">5.9 Clip store</a></li>
+        <li><a href="#knowledge">5.10 knowledge.db &amp; short-term memory</a></li>
+        <li><a href="#links">5.11 How the stores are linked</a></li>
+        <li><a href="#writes">5.12 When things are written</a></li>
+        <li><a href="#reads">5.13 When things are read</a></li>
+        <li><a href="#together">5.14 How they help each other</a></li>
+        <li><a href="#safety">5.15 Failures &amp; consistency</a></li>
+        <li><a href="#growth">5.16 Growth, retention, privacy</a></li>
+      </ol></li>
+    <li><a href="#understand">6 · Understand the question</a></li>
+    <li><a href="#answer">7 · Find &amp; answer</a></li>
+    <li><a href="#journey">8 · One person, end to end</a></li>
+    <li><a href="#qa">9 · Jury questions &amp; answers</a></li>
+    <li><a href="#limits">10 · Honest limitations</a></li>
+    <li><a href="#glossary">11 · Glossary</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="hero">
+  <button class="themebtn" id="themebtn" type="button">Light / dark</button>
+  <h1>Godseye: architecture, models and storage, explained from the code</h1>
+  <p class="lead">Godseye watches many CCTV cameras, writes down who and what it saw (where, when, which camera, with video proof), and lets you ask questions in plain English such as <em>“show me the man in the red jacket on the gate camera this morning”</em>. Every answer is built only from stored records.</p>
+  <p class="small muted">How this page was made: every statement was checked against the source code at commit <code>83de6a4</code> (2026-10-08). The example rows and file names in the storage section come from a real run of the project's own storage code (<code>EvidenceStore</code> with SQLite, ChromaDB 1.5.9 and ffmpeg) fed with a made-up scene: two cameras, one person and one car. The values are real outputs of the code; the scene is synthetic.</p>
+  <div class="chips">
+    <span class="chip">2 paths: write (Track A) and read (Track B)</span>
+    <span class="chip">5 stages in the diagram</span>
+    <span class="chip">4 stores on disk</span>
+    <span class="chip">Neural models: OWL-ViT (NanoOWL), FastReID ×2, Qwen3-8B</span>
+    <span class="chip">Runs fully on one machine, no cloud</span>
+  </div>
+</header>
+
+<details class="mobile-toc"><summary>Contents</summary>
+  <a href="#fix">0 · Fix before the jury</a><a href="#big">1 · Big picture</a><a href="#capture">2 · Capture</a><a href="#see">3 · See</a><a href="#models">4 · Models</a><a href="#remember">5 · Storage deep dive</a><a href="#understand">6 · Understand</a><a href="#answer">7 · Find &amp; answer</a><a href="#journey">8 · End to end</a><a href="#qa">9 · Jury Q&amp;A</a><a href="#limits">10 · Limitations</a><a href="#glossary">11 · Glossary</a>
+</details>
+
+<!-- ============================================================ 0 -->
+<section id="fix">
+<h2>0 · Fix these before the jury: where the diagram and the code disagree</h2>
+<p>Your diagram is a good simplification, but a few labels say something the code does not do. If a juror reads the diagram and then asks about one of these, you need the precise answer. The first three matter most.</p>
+
+<div class="mismatch">
+  <div class="title"><span class="tag sev-h">HIGH</span> Section 2: “Detect · Grounding Dino + Clip embedding”</div>
+  <div><div class="h">Diagram says</div>Detection is done by Grounding DINO.</div>
+  <div><div class="h">Code actually does</div>Detection is done by <b>NanoOWL</b> running Google's <b>OWL-ViT</b> model (<code>google/owlvit-base-patch32</code>) as a TensorRT FP16 engine. Grounding DINO is not anywhere in the repository (<code>godseye/perception/nanoowl_detector.py</code>, <code>config/perception.yaml</code>).</div>
+  <div><div class="h">Fix</div>Rename the box to <b>“Detect · NanoOWL (OWL-ViT B/32) + reused CLIP-space embedding”</b>. Both are open-vocabulary detectors (you type what to look for), which is probably where the mix-up came from, but they are different models. The master contract names NanoOWL.</div>
+</div>
+
+<div class="mismatch">
+  <div class="title"><span class="tag sev-h">HIGH</span> Section 2: “open-vocabulary objects” vs questions like “red handbag” or “large suitcase”</div>
+  <div><div class="h">Diagram says</div>Open-vocabulary detection, which suggests any object can be found.</div>
+  <div><div class="h">Code actually does</div>The detector <b>can</b> find any object you describe in text, but it only looks for the <b>8 prompts configured</b> in <code>config/perception.yaml</code>, which give <b>6 labels</b>: person, car, truck, bus, motorcycle, bicycle. Handbags, suitcases and backpacks are never prompted, so they are never detected, tracked or stored. Track B's vocabulary (<code>config/query.yaml: objects</code> and <code>object_classes</code> in <code>godseye/answer/config.py</code>) has the same 6 labels, so a plan with “handbag” is rejected.</div>
+  <div><div class="h">Fix / what to say</div>Today: “bags and luggage are not in the configured vocabulary yet”. Adding them is mostly configuration, but “the man with the red handbag” also needs a person↔bag link, which does not exist, and bags would get no cross-camera identity. See <a href="#objects">what is detected</a>.</div>
+</div>
+
+<div class="mismatch">
+  <div class="title"><span class="tag sev-h">HIGH</span> Section 3: “writes each event once, under one record_id” / “three stores, linked by the same record_id”</div>
+  <div><div class="h">Diagram says</div>There is a single <code>record_id</code> shared by ChromaDB, SQLite and the clip store.</div>
+  <div><div class="h">Code actually does</div>No column or id called <code>record_id</code> exists. The stores are linked by <b>three natural keys</b>: <code>global_id</code> (the person/vehicle identity), the track key <code>camera_id:stream_epoch:track_id</code> (stored as <code>tracks.embedding_id</code> and used as the Chroma id), and <code>clip_id</code> / <code>clips.path</code> for video. Writes are once-only because they are <b>idempotent</b>: UNIQUE constraints in SQLite and deterministic ids in Chroma, so re-writing the same frame changes nothing.</div>
+  <div><div class="h">Fix</div>Change the text to <b>“three stores, linked by global_id, track key and clip_id”</b>. See <a href="#links">5.11</a>.</div>
+</div>
+
+<div class="mismatch">
+  <div class="title"><span class="tag sev-h">HIGH</span> Section 5: “Query planner · LLM function call → constrained plan (no free SQL)”</div>
+  <div><div class="h">Diagram says</div>The LLM builds the plan through a function call.</div>
+  <div><div class="h">Code actually does</div>The planner is <b>plain deterministic code</b> (<code>make_plan</code> in <code>godseye/answer/plan.py</code>). The LLM is not called at all in step 5 unless optional answer re-wording is switched on (it is off by default). The plan is a strict, allow-listed object with five possible operations, and it is validated against the database before anything runs. “No free SQL” is correct.</div>
+  <div><div class="h">Fix</div>Rename to <b>“Query planner · deterministic, allow-listed plan (no LLM, no free SQL)”</b>. This is a stronger security story, so say it proudly.</div>
+</div>
+
+<div class="mismatch">
+  <div class="title"><span class="tag sev-m">MEDIUM</span> Section 4: “Knowledge store (SQLite) · named places, camera names, learned answers”</div>
+  <div><div class="h">Diagram says</div>It stores “learned answers”.</div>
+  <div><div class="h">Code actually does</div>It stores <b>aliases</b> (a word the user used, mapped to a real camera, object label or identity) and <b>zones</b> (rectangles drawn on a camera view). They are learned only when the user answers a clarification question. It never stores answers or facts about events; those always come fresh from Track A's data.</div>
+  <div><div class="h">Fix</div>Say <b>“named places, camera names, learned aliases from the user's clarifications”</b>.</div>
+</div>
+
+<div class="mismatch">
+  <div class="title"><span class="tag sev-m">MEDIUM</span> Section 1 → 2: “Preprocess · resize · letterbox · normalise”</div>
+  <div><div class="h">Diagram says</div>The detector receives the resized, letterboxed, normalised image.</div>
+  <div><div class="h">Code actually does</div>Preprocessing does produce a 640×640 letterboxed float image (the Phase 1 contract), but NanoOWL actually reads the <b>full-resolution original frame</b> (<code>original_bgr</code>) and resizes it itself to OWL-ViT's native 768×768 with CLIP normalisation. Privacy masks are applied to that original too, before detection and before storage.</div>
+  <div><div class="h">Fix</div>No diagram change needed, but know it. It is documented as an open “640 vs 768” decision in CLAUDE.md.</div>
+</div>
+
+<div class="mismatch">
+  <div class="title"><span class="tag sev-l">LOW</span> Grounded answer outcomes · “match / no match / partial / ambiguous”</div>
+  <div><div class="h">Diagram says</div>Four outcomes.</div>
+  <div><div class="h">Code actually does</div>Five statuses: <code>OK</code>, <code>NO_RESULT</code>, <code>PARTIAL_EVIDENCE</code>, <code>AMBIGUOUS_RESULT</code> and <code>SYSTEM_ERROR</code>. The fifth matters: a crash or an unreachable database is never reported as “no result”.</div>
+  <div><div class="h">Fix</div>Add <b>“/ system error”</b>.</div>
+</div>
+
+<div class="mismatch">
+  <div class="title"><span class="tag sev-l">LOW</span> “Local LLM · understanding (Qwen3 8B)”</div>
+  <div><div class="h">Diagram says</div>Qwen3 8B.</div>
+  <div><div class="h">Code actually does</div>Correct, but the project specification asks for Llama 3. Qwen3 8B is a <b>documented, user-approved deviation</b> (it was the only 8B model installed). The model is one config value (<code>config/query.yaml: model</code>).</div>
+  <div><div class="h">Fix</div>Be ready to say why: same size class, it was available locally, it handles JSON-schema output well, and switching back is one line plus re-running the LLM tests.</div>
+</div>
+
+<div class="mismatch">
+  <div class="title"><span class="tag sev-l">LOW</span> Section 3: “ChromaDB · vectors”</div>
+  <div><div class="h">Diagram says</div>One kind of vector.</div>
+  <div><div class="h">Code actually does</div>Three collections holding <b>two different kinds of vectors</b>: 2048-number FastReID “who is this” vectors (<code>reid_person</code>, <code>reid_vehicle</code>) and 512-number CLIP “what does this look like” vectors (<code>track_clip</code>). They cannot be compared with each other.</div>
+  <div><div class="h">Fix</div>Optional: write “ChromaDB · Re-ID gallery + CLIP track vectors (HNSW, cosine)”.</div>
+</div>
+</section>
+
+<!-- ============================================================ 1 -->
+<section id="big">
+<h2>1 · The big picture</h2>
+<p>The system has two halves that never call each other. The only bridge between them is a folder on disk, <code>data/store/</code>.</p>
+<div class="grid2">
+  <div class="card"><b style="color:var(--c1)">Write path (Track A)</b> runs all the time: cameras → frames → AI → searchable memory. One process: <code>python -m godseye.runtime trackA</code>. It is the <b>only</b> writer of the evidence stores.</div>
+  <div class="card"><b style="color:var(--c5)">Read path (Track B)</b> runs when someone asks: question → understanding → search → grounded answer. Started with <code>python -m godseye.runtime web</code> (browser console) or the terminal chat. It opens Track A's database <b>read-only</b>.</div>
+</div>
+
+<div class="pathtitle w">WRITE PATH · runs continuously</div>
+<div class="pipe">
+  <div class="stage s1"><div class="hd">1 · CAPTURE &amp; PREPARE</div>
+    <div class="box"><b>Ingest &amp; decode</b>one GStreamer pipeline + thread per camera; RTSP / RTMP / HLS / file<span class="src">godseye/ingest/camera.py</span></div>
+    <div class="box"><b>Frame sampler</b>2 fps normally, 5 fps when there is motion; drops near-duplicates<span class="src">godseye/ingest/sampler.py</span></div>
+    <div class="box"><b>Preprocess</b>privacy blur/black masks, letterbox 640, RGB float32<span class="src">godseye/ingest/preprocess.py</span></div>
+  </div>
+  <div class="stage s2"><div class="hd">2 · SEE (AI perception)</div>
+    <div class="box"><b>Detect · NanoOWL (OWL-ViT)</b>box, label, confidence for text prompts<span class="src">perception/nanoowl_detector.py</span></div>
+    <div class="box"><b>Embed · reused CLIP-space vector</b>512 numbers per object, from the same forward pass<span class="src">perception/nanoowl_detector.py</span></div>
+    <div class="box"><b>Track · ByteTrack</b>frame-to-frame, gives <code>track_id</code> (per camera)<span class="src">perception/tracker.py</span></div>
+    <div class="box"><b>Re-identify · FastReID</b>2048 numbers per crop, gives <code>global_id</code> across cameras<span class="src">perception/reid.py, identity.py</span></div>
+  </div>
+  <div class="stage s3"><div class="hd">3 · REMEMBER (storage)</div>
+    <div class="box"><b>EvidenceStore</b>one writer, one SQLite transaction per frame<span class="src">godseye/storage/store.py</span></div>
+    <div class="box"><b>ChromaDB</b>vectors + HNSW similarity index<span class="src">storage/vectors.py → data/store/chroma/</span></div>
+    <div class="box"><b>SQLite</b>cameras, identities, tracks, observations, clips<span class="src">storage/db.py → data/store/godseye.db</span></div>
+    <div class="box"><b>Clip store</b>validated H.264 .mp4 evidence<span class="src">storage/clips.py → data/store/clips/</span></div>
+  </div>
+</div>
+<div class="flowlbl">↓ read-only lookups (SQLite rows, track_clip vectors, clip files) ↓</div>
+<div class="pathtitle r">READ PATH · runs when someone asks</div>
+<div class="pipe" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+  <div class="stage s4"><div class="hd">4 · UNDERSTAND the question</div>
+    <div class="box"><b>Local LLM · Qwen3-8B via Ollama</b>question → strict JSON (intent, object, time words, places, referent)<span class="src">godseye/query/nlu.py, llm.py</span></div>
+    <div class="box"><b>Referent resolver</b>“the gate”, “cam 2”, “he” → real camera ids / identities<span class="src">query/resolver.py, understand.py</span></div>
+    <div class="box"><b>Clarify if unsure</b>choices, camera grid, click on the person, draw an area, free text<span class="src">query/understand.py</span></div>
+    <div class="box"><b>Knowledge store (knowledge.db)</b>learned aliases and zones<span class="src">query/knowledge.py</span></div>
+  </div>
+  <div class="stage s5"><div class="hd">5 · FIND &amp; ANSWER</div>
+    <div class="box"><b>Query planner</b>deterministic, 5 allow-listed operations, validated<span class="src">godseye/answer/plan.py</span></div>
+    <div class="box"><b>Retrieve</b>SQL filters, then Chroma similarity ranking, then best evidence clip<span class="src">answer/retrieval.py</span></div>
+    <div class="box"><b>Reconstruct path</b>visits per camera (OBSERVED) + gaps between them (INFERRED)<span class="src">answer/path.py, topology.py</span></div>
+    <div class="box"><b>Build response</b>templates filled with stored values; optional LLM rewording, fact-checked<span class="src">answer/response.py</span></div>
+  </div>
+</div>
+
+<h3>Four rules that hold everywhere</h3>
+<ol>
+  <li><b><code>track_id</code> and <code>global_id</code> are different things.</b> <code>track_id</code> is a small number given by ByteTrack on one camera (“person #3 on the lobby camera”). <code>global_id</code> (e.g. <code>person-92a28feeb303</code>) is given by FastReID matching and means “the same individual across cameras”. They are stored in separate columns and never reused for each other.</li>
+  <li><b>The LLM's output is data, never a command.</b> It produces JSON that is validated field by field. It cannot run SQL, shell commands or file operations, and there is a test that scans the query code for such calls.</li>
+  <li><b>Track A and Track B only share the disk.</b> No function calls, no shared memory. Track B opens <code>godseye.db</code> with <code>mode=ro</code> and <code>PRAGMA query_only=ON</code>.</li>
+  <li><b>Answers are grounded.</b> Every camera, time, id and clip in an answer comes from a stored row. If nothing is stored, the answer says so and adds that this does not prove absence.</li>
+</ol>
+</section>
+
+<!-- ============================================================ 2 -->
+<section id="capture" class="s1">
+<h2><span class="secbadge">1</span> Capture &amp; prepare</h2>
+<p>Goal: turn live camera streams into a steady, small number of clean frames per second, each labelled with its camera and capture time.</p>
+<h3>Ingest &amp; decode (GStreamer)</h3>
+<p>GStreamer is a media framework: you chain “elements” into a pipeline. Each camera gets its own pipeline and thread:</p>
+<pre><code>rtspsrc  ! decodebin ! videoconvert ! video/x-raw,format=BGR ! appsink max-buffers=2 drop=true
+(rtmp2src | souphttpsrc+decodebin3 for HLS | filesrc for replay)</code></pre>
+<ul>
+  <li><b>Source</b> receives the network stream, <b>decodebin</b> picks the right decoder (H.264 via libav), <b>videoconvert</b> converts to BGR pixels, <b>appsink</b> hands frames to Python.</li>
+  <li><code>max-buffers=2 drop=true</code>: if Python is slow, old frames are dropped instead of building up delay.</li>
+  <li>Reconnect with back-off, a watchdog for stalled streams, and a counter called <b><code>stream_epoch</code></b> that goes up by one on every reconnect. Trackers reset when it changes, which is why tracks are keyed by <code>(camera_id, stream_epoch, track_id)</code> later.</li>
+  <li>Camera passwords are written as <code>${ENV_VAR}</code> in the config and are redacted from error messages.</li>
+</ul>
+<h3>Frame sampler</h3>
+<p>Running AI on every frame of a 25 fps camera is wasteful. The sampler (<code>godseye/ingest/sampler.py</code>) decides which frames go on:</p>
+<div class="tblwrap"><table>
+<tr><th>Rule</th><th>Default</th><th>Why</th></tr>
+<tr><td>Base rate</td><td>2 frames per second</td><td>enough to follow walking people</td></tr>
+<tr><td>Burst rate on motion</td><td>5 frames per second</td><td>MOG2 background subtraction says ≥ 0.5% of pixels changed</td></tr>
+<tr><td>Redundancy drop</td><td>mean grey-level difference &lt; 1.0 on a 160-px thumbnail</td><td>a static scene does not need re-analysing</td></tr>
+<tr><td>Keepalive</td><td>at least one frame every 5 s</td><td>proves the camera is alive even when nothing moves</td></tr>
+</table></div>
+<h3>Preprocess</h3>
+<ul>
+  <li><b>Privacy masks</b>: rectangles that are blurred (Gaussian) or blacked out, for example a neighbour's window. If masks are configured, the storage layer <b>refuses</b> to save an unmasked original.</li>
+  <li><b>Letterbox to 640×640</b> (keep aspect ratio, pad with grey value 114), convert BGR → RGB, scale pixels to float32 values between 0 and 1.</li>
+  <li>Keeps a full-resolution copy <code>original_bgr</code> (uint8) for the detector, Re-ID crops and evidence clips.</li>
+</ul>
+<h4>Output: <code>PreprocessedFrame</code> (<code>godseye/ingest/types.py</code>)</h4>
+<div class="tblwrap"><table>
+<tr><th>Field</th><th>Type</th><th>Meaning</th></tr>
+<tr><td class="k">camera_id</td><td>str</td><td>from the config, e.g. <code>lobby_cam</code>; must match <code>[A-Za-z0-9_.-]{1,64}</code> because it becomes a folder name</td></tr>
+<tr><td class="k">frame_seq</td><td>int</td><td>number of this frame among the <em>sampled</em> frames of this camera</td></tr>
+<tr><td class="k">stream_epoch</td><td>int</td><td>+1 on every reconnect</td></tr>
+<tr><td class="k">capture_ts</td><td>float</td><td>wall-clock time in seconds since 1970-01-01 UTC (Unix epoch)</td></tr>
+<tr><td class="k">image</td><td>float32 (640,640,3)</td><td>letterboxed RGB, values 0–1</td></tr>
+<tr><td class="k">transform</td><td>LetterboxTransform</td><td>maps boxes between model space and original pixels</td></tr>
+<tr><td class="k">original_bgr</td><td>uint8 (H,W,3)</td><td>full-resolution frame (masked if masks apply)</td></tr>
+<tr><td class="k">sample_reason</td><td>str</td><td>first | base | burst | keepalive</td></tr>
+<tr><td class="k">motion_score</td><td>float</td><td>fraction of pixels MOG2 marked as moving</td></tr>
+</table></div>
+</section>
+
+<!-- ============================================================ 3 -->
+<section id="see" class="s2">
+<h2><span class="secbadge">2</span> See (AI perception)</h2>
+<p>One worker thread (<code>PerceptionPipeline.process</code>, <code>godseye/perception/pipeline.py</code>) runs four steps on each sampled frame. The GPU models are shared by all cameras.</p>
+
+<h3>Detect · NanoOWL (OWL-ViT)</h3>
+<p>You give the detector text prompts and it finds matching objects. The prompts in <code>config/perception.yaml</code>:</p>
+<div class="tblwrap"><table>
+<tr><th>Prompt text</th><th>Stored label</th><th>Re-ID class</th><th>Threshold</th></tr>
+<tr><td>“a person”, “a man”, “a woman”</td><td>person</td><td>person</td><td>0.15</td></tr>
+<tr><td>“a photo of a car / truck / bus”</td><td>car / truck / bus</td><td>vehicle</td><td>0.15</td></tr>
+<tr><td>“a photo of a motorcycle / bicycle”</td><td>motorcycle / bicycle</td><td>other (tracked, no global_id)</td><td>0.15</td></tr>
+</table></div>
+<div class="bad" id="objects"><b>What is and is not stored.</b> Only objects matching these prompts exist anywhere in the system. All 6 labels are stored (tracks, observations, track_clip vectors, clips), but only <b>person</b> and <b>vehicle</b> (car, truck, bus) get a cross-camera <code>global_id</code>, because FastReID models exist only for those two (the <code>identities</code> table even has <code>CHECK (reid_class IN ('person','vehicle'))</code>). Motorcycles and bicycles are stored as <code>other</code> with no identity. <b>Handbags, suitcases, backpacks and any other object are not prompted, so they are not detected or stored at all.</b> The storage schema itself is not the blocker: <code>tracks.label</code> is free text and <code>other</code> exists. The blockers are (1) the prompt list, (2) Track B's 6-label vocabulary, (3) no link between a person and the bag they carry, and (4) no Re-ID model for bags. The only approximation today is asking about a <em>person</em> with a description (e.g. “person with a red handbag”): the CLIP ranking of person tracks may reflect the bag, but that is unvalidated and still returns people, not bags.</div>
+<p>After scoring: boxes smaller than 8 px are dropped, overlapping boxes of the same label are merged by NMS (IoU 0.5), at most 100 detections per frame, boxes are converted to original-frame pixels. Measured: about <b>10 ms per frame</b> on the RTX 5050 with TensorRT FP16.</p>
+
+<h3>Embed · reused vector (no extra model)</h3>
+<p>Inside OWL-ViT, every image patch produces a 512-number “class embedding” that is compared with the prompt's text embedding to score it. Godseye keeps that vector for each detection instead of running a second CLIP model. It is normalised to length 1 and checked (shape 512, finite, norm 1 ± 0.001). Per track, the vectors are averaged and normalised again; this average is what gets stored in ChromaDB <code>track_clip</code> and is what makes “red jacket” search possible.</p>
+
+<h3>Track · ByteTrack</h3>
+<ul>
+  <li>One ByteTrack instance per class group (person / vehicle / other) per camera, so a person box can never be joined to a car track.</li>
+  <li>Gives each object a <code>track_id</code> 1, 2, 3… that is unique only on that camera and that <code>stream_epoch</code>.</li>
+  <li>Keeps per track: hits (frames matched), first/last seen, the most-voted label, a trajectory of the last 50 centre points, and the mean reused embedding.</li>
+  <li>A track ends as <code>lost_timeout</code> after about 5 sampled frames without a match (1–2.5 s at 5–2 fps), <code>stream_restart</code> on reconnect, or <code>shutdown</code>.</li>
+</ul>
+
+<h3>Re-identify · FastReID + identity resolver</h3>
+<p>FastReID turns a cropped person or vehicle into 2048 numbers that describe appearance. Two crops of the same person give similar vectors, even on different cameras. The resolver (<code>godseye/perception/identity.py</code>) then decides the <code>global_id</code>:</p>
+<ol>
+  <li>Crops are skipped if more than 30% covered by another box (occlusion), shorter than 48 px, or with an implausible shape (person height/width outside 0.8–4.0).</li>
+  <li>After <b>3</b> good crops, their average vector is compared to the gallery (all known identities, stored in ChromaDB).</li>
+  <li>Decision rules:</li>
+</ol>
+<div class="tblwrap"><table>
+<tr><th>Best similarity</th><th>Result</th><th>What gets stored</th></tr>
+<tr><td>≥ 0.70 <b>and</b> beats the second-best identity by ≥ 0.05</td><td><code>matched</code></td><td>existing <code>global_id</code>; the vector is added to that identity's exemplars</td></tr>
+<tr><td>below 0.55 (or empty gallery)</td><td><code>new</code></td><td>new <code>global_id</code> like <code>person-92a28feeb303</code></td></tr>
+<tr><td>in between, or too close to the runner-up</td><td><code>ambiguous</code></td><td>no <code>global_id</code>; top-3 candidates and scores saved; one re-check at 8 crops; never force-merged</td></tr>
+</table></div>
+<p>An identity currently visible on the same camera under a different track is excluded (one person cannot be two tracks on one camera at once). Motorcycles and bicycles get <code>not_applicable</code>. The design is deliberately conservative: a missed merge creates a duplicate identity (fixable), a wrong merge would mix two people's paths (dangerous).</p>
+<div class="warn"><b>Honest caveat:</b> the thresholds 0.70 / 0.05 / 0.55 are defaults, not calibrated on real site footage. On Market-1501 (a public dataset from a different domain) Rank-1 was 0.62. In a 40-person test there were 0 wrong merges, 15 correct matches, 10 ambiguous and 15 new. Vehicle Re-ID is not validated.</div>
+
+<h4>Output: <code>EnrichedFrame</code> → goes to storage</h4>
+<p><code>source</code> (the PreprocessedFrame), <code>detections</code> (box, label, confidence, 512-d embedding, provenance), <code>tracks</code> (one <code>TrackedObject</code> snapshot per live track), <code>ended_tracks</code> (<code>TrackEnded</code> records), <code>timings_ms</code>.</p>
+</section>
+
+<!-- ============================================================ 4 -->
+<section id="models">
+<h2>4 · The models and the technology behind them</h2>
+<div class="tblwrap"><table>
+<tr><th>Model / algorithm</th><th>Used for</th><th>Input → output</th><th>Runs on</th><th>Where</th></tr>
+<tr><td><b>OWL-ViT B/32</b> via <b>NanoOWL</b></td><td>open-vocabulary detection + reused embeddings</td><td>frame (768×768) + text prompts → boxes, scores, 512-d vector per box</td><td>GPU, TensorRT FP16</td><td>perception/nanoowl_detector.py</td></tr>
+<tr><td><b>OWL-ViT text tower</b> (same model family)</td><td>“red jacket” search, matching words like “guy” → person</td><td>text → 512-d vector</td><td>CPU</td><td>query/embedder.py</td></tr>
+<tr><td><b>ByteTrack</b> (Kalman filter + Hungarian matching)</td><td>per-camera tracking</td><td>boxes per frame → track_ids</td><td>CPU</td><td>perception/bytetrack/, tracker.py</td></tr>
+<tr><td><b>FastReID SBS R50-ibn</b>, MSMT17 weights</td><td>person Re-ID</td><td>person crop → 2048-d vector</td><td>GPU, FP16</td><td>perception/reid.py</td></tr>
+<tr><td><b>FastReID SBS R50-ibn</b>, VeRi weights</td><td>vehicle Re-ID (unvalidated)</td><td>vehicle crop → 2048-d vector</td><td>GPU, FP16</td><td>perception/reid.py</td></tr>
+<tr><td><b>Qwen3-8B</b> via <b>Ollama</b></td><td>understanding the question</td><td>question text → JSON (ParsedQuery)</td><td>GPU (local) or Ray peer GPU</td><td>query/llm.py, nlu.py</td></tr>
+<tr><td><b>MOG2</b> (classic computer vision, not a neural net)</td><td>motion detection in the sampler</td><td>small grey frame → moving-pixel mask</td><td>CPU, OpenCV</td><td>ingest/sampler.py</td></tr>
+</table></div>
+
+<div class="grid2">
+<div class="card">
+<h4 style="margin-top:0">CLIP, the idea underneath</h4>
+<p>CLIP (OpenAI, 2021) was trained on hundreds of millions of image–caption pairs so that an image and a sentence describing it end up as <b>nearby vectors</b> in the same 512-number space. That is why you can compare a picture with words: you compare their vectors.</p>
+</div>
+<div class="card">
+<h4 style="margin-top:0">OWL-ViT and NanoOWL</h4>
+<p><b>OWL-ViT</b> (Google, 2022) starts from CLIP and turns it into a detector. A Vision Transformer cuts the 768×768 image into 32×32-pixel patches (24×24 = 576 patches). For every patch, a small head predicts a box and another head predicts a class embedding. The embedding is compared with the text prompts' embeddings; a high score means “this patch contains a person”. Because the classes are just text, you can detect new things by changing a prompt, with no retraining.</p>
+<p><b>NanoOWL</b> is NVIDIA's project that makes OWL-ViT fast by compiling the image encoder with <b>TensorRT</b>. Godseye uses NanoOWL's own predictor unchanged (pinned commit <code>fb553dee</code>) and adds a TensorRT 11 engine loader, a decoder that remembers which patch each box came from (so the embedding can be reused), NMS and provenance.</p>
+</div>
+<div class="card">
+<h4 style="margin-top:0">TensorRT, FP16</h4>
+<p>TensorRT is NVIDIA's inference optimiser: it fuses layers and picks the fastest GPU kernels for this exact GPU. The engine is built once (about a minute), cached in <code>models/nanoowl/</code>, and its SHA-256 is recorded as provenance. FP16 means 16-bit floats for the maths: about twice as fast as 32-bit with negligible accuracy loss for detection.</p>
+</div>
+<div class="card">
+<h4 style="margin-top:0">ByteTrack</h4>
+<p>ByteTrack (2022) links boxes across frames. A <b>Kalman filter</b> predicts where each track's box should be next from its past motion. The <b>Hungarian algorithm</b> then finds the best one-to-one pairing between predicted boxes and new detections using box overlap (IoU). ByteTrack's twist: it first matches high-confidence detections, then tries the <b>low-confidence</b> ones against the leftover tracks. Low scores often mean a partly hidden person, so this keeps tracks alive through occlusion.</p>
+</div>
+<div class="card">
+<h4 style="margin-top:0">FastReID SBS R50-ibn</h4>
+<p>FastReID is an open-source re-identification toolbox. The model is a <b>ResNet-50</b> network with <b>IBN</b> (Instance-Batch Normalization) layers; IBN makes features less sensitive to colour and lighting differences between cameras. “SBS” is FastReID's stronger-baseline training recipe. It was trained so that crops of the same person are close and crops of different people are far apart. Output: 2048 numbers, normalised to length 1. Weights: <b>MSMT17</b> (a large multi-camera person dataset) and <b>VeRi-776</b> (vehicles). The loader fixes a key-naming difference in the released checkpoints and refuses to run if any weight is missing.</p>
+</div>
+<div class="card">
+<h4 style="margin-top:0">Qwen3-8B on Ollama</h4>
+<p>Qwen3-8B is an open-weight 8-billion-parameter language model from Alibaba's Qwen team. <b>Ollama</b> runs it locally (loopback address only; a non-local URL is rejected). Settings: temperature 0 (deterministic), context 4096 tokens, thinking mode off, and a <b>JSON schema</b> passed as <code>format</code> so the model can only produce JSON of that shape. Pydantic then re-validates it strictly. Measured: about 6 GB of VRAM when loaded, 1.2 s median per question locally. It can be moved to a second PC's GPU through a Ray gateway.</p>
+</div>
+</div>
+</section>
+
+<!-- ============================================================ 5 -->
+<section id="remember" class="s3">
+<h2><span class="secbadge">3</span> Remember: the storage and memory deep dive</h2>
+<p>This is the part that turns a stream of AI outputs into something you can search a week later. Code: <code>godseye/storage/</code> (Track A, writer) and <code>godseye/query/knowledge.py</code> (Track B's own memory).</p>
+
+<h3 id="disk">5.1 What is actually on disk</h3>
+<p>Everything lives under one folder, <code>data/store/</code> (setting <code>root</code> in <code>config/storage.yaml</code>). This is the real file tree produced by the demo run (sizes in bytes):</p>
+<div class="tree">data/store/
+├── .lock                                   <span class="c">0      single-writer lock (fcntl), held by Track A</span>
+├── godseye.db                              <span class="c">90112  SQLite: the structured facts (source of truth)</span>
+├── godseye.db-wal, godseye.db-shm          <span class="c">       SQLite write-ahead log files while open (WAL mode)</span>
+├── knowledge.db                            <span class="c">       SQLite: Track B's learned aliases and zones (created by Track B)</span>
+├── chroma/                                 <span class="c">       ChromaDB persistent directory</span>
+│   ├── chroma.sqlite3                      <span class="c">237568 Chroma's own internal catalogue: ids, metadata, write log</span>
+│   ├── 2b313d02-…/                         <span class="c">       HNSW index of reid_person (one folder per collection)</span>
+│   │   ├── data_level0.bin                 <span class="c">833200 the vectors + graph links (100 slots × 8,332 bytes)</span>
+│   │   ├── header.bin  length.bin  link_lists.bin
+│   └── 2b3da41e-…/                         <span class="c">       HNSW index of track_clip (100 slots × 2,188 bytes)</span>
+└── clips/
+    └── 2026-10-08/                         <span class="c">       UTC date of the clip's first frame</span>
+        ├── lobby_cam/1791450900000_a2567c72.mp4   <span class="c">start time in ms _ random 8 hex .mp4</span>
+        └── gate_cam/1791450940000_4b6c4dda.mp4</div>
+<p class="small muted">The demo clips are tiny (≈1.8 KB) because the synthetic frames are flat colours; real camera clips are far larger. <code>reid_vehicle</code> has no folder yet because nothing was written to it. HNSW files are pre-allocated in blocks, so 2 vectors still occupy 100 slots.</p>
+
+<h3 id="glance">5.2 The four stores at a glance</h3>
+<p>You described “3 DBs”. In the diagram's section 3 there are three: <b>ChromaDB</b>, <b>SQLite (<code>godseye.db</code>)</b> and the <b>clip store</b>. Strictly, the clip store is a folder of files, not a database. And there is a fourth store in section 4: <b><code>knowledge.db</code></b>, a separate SQLite file that belongs to Track B.</p>
+<div class="tblwrap"><table>
+<tr><th></th><th>SQLite · godseye.db</th><th>ChromaDB · chroma/</th><th>Clip store · clips/</th><th>SQLite · knowledge.db</th></tr>
+<tr><td><b>Kind</b></td><td>relational database (tables, rows, SQL)</td><td>vector database (embeddings + similarity index)</td><td>plain files on the filesystem</td><td>relational database</td></tr>
+<tr><td><b>Holds</b></td><td>who / what / where / when: cameras, identities, tracks, observations (boxes), clip index</td><td>appearance vectors: Re-ID gallery (who is it?) and CLIP track vectors (what does it look like?)</td><td>the video proof: H.264 .mp4 segments</td><td>user-taught names: aliases and zones</td></tr>
+<tr><td><b>Main data types</b></td><td>TEXT, INTEGER, REAL (8-byte float), JSON stored as TEXT</td><td>float32 arrays of 2048 or 512 numbers + small metadata dicts</td><td>binary video (H.264, yuv420p, MP4 container)</td><td>TEXT, REAL, INTEGER</td></tr>
+<tr><td><b>Answers questions like</b></td><td>“tracks of a person on lobby_cam between 9 and 10”</td><td>“which known identity is closest to this crop?”, “which of these tracks looks most like ‘red jacket’?”</td><td>“show me the moment”</td><td>“what does ‘the north entrance’ mean?”</td></tr>
+<tr><td><b>Written by</b></td><td>Track A (<code>EvidenceStore</code>, <code>PersistentGallery</code>)</td><td>Track A</td><td>Track A (<code>ClipWriter</code> → ffmpeg)</td><td>Track B (from clarification answers)</td></tr>
+<tr><td><b>Read by</b></td><td>Track B (read-only), web server</td><td>Track A (gallery), Track B (<code>track_clip</code> only)</td><td>Track B web server (by <code>clip_id</code>)</td><td>Track B resolver, memory panel</td></tr>
+<tr><td><b>Source of truth?</b></td><td><b>Yes</b>, for all structured facts</td><td>No: vectors only, can be re-checked against SQLite</td><td>Yes for video, but only referenced after validation</td><td>Yes for learned names</td></tr>
+</table></div>
+
+<h3 id="why">5.3 Why not use a single database?</h3>
+<p>Because the data comes in three completely different shapes, and each shape needs a different kind of engine to be searched fast.</p>
+<div class="grid3">
+<div class="card"><b>Facts with exact filters → SQLite</b><p class="small">“camera = lobby_cam AND time between 9 and 10 AND label = person”. Relational databases are built for exact filters, joins between tables, counts, transactions and indexes. SQLite is a single file with no server, which fits a single local machine. It is required by the project specification.</p></div>
+<div class="card"><b>“Find the most similar” → ChromaDB</b><p class="small">“Which of 10,000 stored 2048-number vectors is closest to this one?” SQL cannot do that efficiently: it would read every row and do 2048 multiplications each. ChromaDB keeps an <b>HNSW</b> index, a graph that jumps to the nearest neighbours in a handful of steps. Also required by the specification.</p></div>
+<div class="card"><b>Large binary video → files</b><p class="small">A clip is megabytes. Video players, browsers and ffmpeg understand MP4 files directly and can seek inside them; putting blobs in a database bloats it and makes backups and deletion painful. The database stores only the path, size, SHA-256 and frame times.</p></div>
+</div>
+<p><b>Why is <code>knowledge.db</code> separate from <code>godseye.db</code>?</b> Because Track B must never write into Track A's evidence database. That keeps the evidence tamper-proof from the chat side (it is opened read-only), keeps the single-writer rule simple (Track A holds a lock), and lets you wipe the learned names without touching evidence.</p>
+<p><b>What is the cost of splitting?</b> No transaction can cover SQLite, ChromaDB and files at once. Godseye handles that with a strict write order, a recovery step on start-up and a reconcile tool (see <a href="#safety">5.15</a>). Say this openly; it shows you understand the trade-off.</p>
+<div class="note"><b>Good to know:</b> ChromaDB itself keeps an internal SQLite file (<code>chroma.sqlite3</code>) for ids, metadata and its write log. The similarity search, however, is done by the HNSW index files next to it. So “Chroma is just SQLite” is not true, and Godseye's own facts are not stored there.</div>
+<div class="say">We split by data shape: exact facts in SQLite, similarity search in ChromaDB, video as files. SQLite is the source of truth; the other two are linked to it by ids. Since no transaction can span all three, we write in an order that can only ever leave harmless orphans, never a reference to something missing, and we have recovery and reconcile tools for those orphans.</div>
+
+<h3 id="primer">5.4 Primer: the concepts you must be able to explain</h3>
+
+<h4>Vector / embedding</h4>
+<p>A vector is just a fixed-length list of numbers. An <b>embedding</b> is a vector produced by a neural network so that <b>similar things get similar numbers</b>. Godseye stores two kinds:</p>
+<div class="tblwrap"><table>
+<tr><th>Vector</th><th>Length</th><th>Produced by</th><th>Means</th><th>Stored in</th></tr>
+<tr><td>Re-ID feature</td><td>2048</td><td>FastReID</td><td>“what this individual looks like” (clothes, build, colours), tuned to tell individuals apart</td><td>Chroma <code>reid_person</code> / <code>reid_vehicle</code></td></tr>
+<tr><td>CLIP-space track vector</td><td>512</td><td>OWL-ViT (reused), averaged per track</td><td>“what this object looks like in words space”, comparable with text like “red jacket”</td><td>Chroma <code>track_clip</code></td></tr>
+<tr><td>Text query vector</td><td>512</td><td>OWL-ViT text tower</td><td>the meaning of the words typed by the user</td><td>not stored (computed per question, cached in RAM)</td></tr>
+</table></div>
+<p>Only vectors from the <b>same model</b> can be compared. A 2048-d Re-ID vector and a 512-d CLIP vector live in different spaces.</p>
+
+<h4>float32</h4>
+<p>Each number in a vector is a <b>32-bit floating-point number</b> (IEEE-754 single precision): 4 bytes, about 7 significant decimal digits. So a 2048-d Re-ID vector is 2048 × 4 = <b>8,192 bytes</b> and a 512-d CLIP vector is <b>2,048 bytes</b>. This was verified on the demo store: each HNSW slot of <code>reid_person</code> is 8,332 bytes = 8,192 (vector) + 132 (graph links) + 8 (label). Why float32 and not float64? Half the memory and disk, GPU-native, and similarity does not need more precision. (In SQLite, by contrast, every <code>REAL</code> is an 8-byte float64, used for timestamps and box coordinates.) In code the arrays are <code>numpy.float32</code>; FastReID computes in FP16 on the GPU and converts the result to float32.</p>
+
+<h4>Normalisation (length 1)</h4>
+<p>Every vector is divided by its own length so that its length becomes exactly 1 (“L2-normalised”). Then only the <b>direction</b> matters, not the size, and the dot product of two vectors equals their cosine similarity.</p>
+
+<h4>Cosine similarity and “cosine space”</h4>
+<p>Cosine similarity measures the angle between two vectors: <code>cos = (a·b) / (|a| |b|)</code>. It goes from 1 (same direction, “the same”) through 0 (unrelated) to −1 (opposite). Chroma reports a <b>distance</b> instead: <code>distance = 1 − cosine</code>, so 0 means identical. Godseye converts back: <code>similarity = 1 − distance</code> (<code>vectors.py</code>, <code>retrieval.py</code>).</p>
+<p><b>“Cosine space”</b> is the collection setting <code>{"hnsw:space": "cosine"}</code> given when each collection is created. It tells Chroma which distance to build its HNSW index with (others are <code>l2</code> and inner product). All three Godseye collections use cosine (verified in the demo: <code>metadata={'hnsw:space': 'cosine'}</code>).</p>
+<div class="card">
+<b>Try it: cosine calculator</b>
+<div class="calc" style="margin-top:8px">
+  <div><label for="va">Vector A (comma-separated)</label><input id="va" value="0.6, 0.8"></div>
+  <div><label for="vb">Vector B</label><input id="vb" value="0.8, 0.6"></div>
+</div>
+<div class="out" id="cosout"></div>
+<p class="small muted">Try <code>-0.6, -0.8</code> (opposite, cosine −1) or <code>0.8, -0.6</code> (unrelated, cosine 0). Real vectors have 512 or 2048 numbers, but the maths is identical.</p>
+</div>
+
+<h4>HNSW (how Chroma finds nearest vectors fast)</h4>
+<p><b>Hierarchical Navigable Small World</b> is a graph index. Every vector is a node linked to its closest neighbours (Chroma's default M = 16, so up to 32 links per node on the bottom layer; the 132-byte link block in each file slot matches exactly that). Upper layers contain few nodes with long links, like motorway exits; the bottom layer contains every node. A search starts at the top, greedily walks towards the query, drops a layer, and repeats. It is <b>approximate nearest neighbour (ANN)</b> search: extremely fast and almost always exact at Godseye's scale. Godseye asks for the top 100 exemplars (<code>chroma_query_k</code>) and then picks the best exemplar per identity.</p>
+
+<h4>SHA-256</h4>
+<p>A cryptographic hash function: it reads a file of any size and outputs a 256-bit fingerprint, written as 64 hexadecimal characters. The same input always gives the same fingerprint; changing a single byte gives a completely different one; finding two different files with the same fingerprint is practically impossible.</p>
+<div class="card">
+<b>Try it: change one character and watch the whole hash change</b>
+<div class="calc" style="margin-top:8px;grid-template-columns:minmax(0,1fr)"><div><label for="shain">Text</label><input id="shain" value="clip 2026-10-08/lobby_cam/1791450900000_a2567c72.mp4"></div></div>
+<div class="out" id="shaout"></div>
+<p class="small muted">Computed in your browser by a small built-in SHA-256 implementation (no internet needed).</p>
+</div>
+<p>Where hashes are used in Godseye:</p>
+<div class="tblwrap"><table>
+<tr><th>Where</th><th>Hash</th><th>Purpose</th></tr>
+<tr><td><code>clips.sha256</code></td><td>SHA-256 of the whole .mp4 (64 hex)</td><td>Evidence integrity. Computed once when the clip is published. <code>reconcile(deep=True)</code> re-hashes every clip and flags any whose content changed, even if the size is the same (there is a test for exactly that). Normal answers do a cheaper size check.</td></tr>
+<tr><td>Detection provenance <code>engine_sha256</code></td><td>SHA-256 of the TensorRT engine file</td><td>Records which exact compiled model produced a detection (kept on the in-memory Detection object; not a SQLite column today).</td></tr>
+<tr><td>Detection provenance <code>prompt_hash</code></td><td>first 16 hex of SHA-256 of the prompt list</td><td>Records which prompt set and thresholds were active.</td></tr>
+<tr><td>Re-ID exemplar ids in Chroma</td><td>first 24 hex of <b>SHA-1</b> of (global_id, camera, time, vector bytes)</td><td>Not security: just a deterministic id, so writing the same exemplar twice is a harmless overwrite (idempotent).</td></tr>
+<tr><td><code>global_id</code>, clip file names</td><td><b>UUID4</b> random hex (12 and 8 characters)</td><td>Random unique names. 12 hex = 48 bits ≈ 2.8 × 10<sup>14</sup> possibilities.</td></tr>
+</table></div>
+
+<h4>Other terms used below</h4>
+<ul>
+  <li><b>Epoch timestamp</b>: seconds since 1970-01-01 00:00 UTC, as a decimal number. <code>1791450900.0</code> = 2026-10-08 09:15:00 UTC. Easy to compare and subtract; converted to readable time only in the answer text.</li>
+  <li><b>Primary key (PK)</b>: the column that uniquely identifies a row. <b>Foreign key (FK)</b>: a column that must contain a value that exists in another table's key; SQLite enforces this here (<code>PRAGMA foreign_keys=ON</code>).</li>
+  <li><b>UNIQUE constraint</b>: forbids two rows with the same combination of values. Used to make writes idempotent.</li>
+  <li><b>Upsert</b>: “insert, or update if it already exists” (<code>INSERT … ON CONFLICT … DO UPDATE</code> in SQLite, <code>upsert</code> in Chroma).</li>
+  <li><b>Idempotent</b>: doing it twice has the same effect as once.</li>
+  <li><b>Transaction</b>: a group of writes that either all happen or none (<code>BEGIN IMMEDIATE … COMMIT/ROLLBACK</code>).</li>
+  <li><b>Index</b>: a sorted lookup structure that lets the database jump to matching rows instead of scanning the whole table.</li>
+  <li><b>WAL (write-ahead logging)</b>: SQLite mode in which a writer and many readers can work at the same time. That is what lets Track B read while Track A writes.</li>
+  <li><b>JSON in a TEXT column</b>: small lists stored as text, e.g. <code>frame_ts</code> and <code>identity_candidates</code>.</li>
+</ul>
+
+<h3 id="er">5.5 Relationship diagram</h3>
+<p>Solid lines are foreign keys inside <code>godseye.db</code> (enforced by SQLite). Dashed lines are links to other stores: the same value is stored on both sides and matched by code, because no database can enforce a key across two different engines.</p>
+<div class="tblwrap" style="padding:8px">
+<svg class="er" viewBox="0 0 1180 770" role="img" aria-label="Relationship diagram of the Godseye stores">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path style="fill:var(--muted)" d="M0,0 L10,5 L0,10 z"/></marker>
+  </defs>
+  <rect style="stroke:var(--c3)" x="8" y="8" width="1164" height="398" rx="12" fill="none" stroke-dasharray="5 4"/>
+  <text style="fill:var(--c3)" x="22" y="30" font-size="13" font-weight="700">godseye.db  (SQLite · Track A writes · Track B reads only)</text>
+
+  <!-- cameras -->
+  <g font-size="11.5">
+  <rect style="fill:var(--surface);stroke:var(--border)" x="20" y="60" width="190" height="88" rx="7"/>
+  <rect style="fill:var(--c3)" x="20" y="60" width="190" height="24" rx="7"/><text x="30" y="77" class="hdt" font-weight="700">cameras</text>
+  <text style="fill:var(--c4)" x="30" y="101" font-weight="700">camera_id PK</text>
+  <text style="fill:var(--text)" x="30" y="119">first_seen</text>
+  <text style="fill:var(--text)" x="30" y="137">last_seen</text>
+
+  <!-- identities -->
+  <rect style="fill:var(--surface);stroke:var(--border)" x="20" y="210" width="190" height="124" rx="7"/>
+  <rect style="fill:var(--c3)" x="20" y="210" width="190" height="24" rx="7"/><text x="30" y="227" class="hdt" font-weight="700">identities</text>
+  <text style="fill:var(--c4)" x="30" y="251" font-weight="700">global_id PK</text>
+  <text style="fill:var(--text)" x="30" y="269">reid_class</text>
+  <text style="fill:var(--text)" x="30" y="287">first_seen</text>
+  <text style="fill:var(--text)" x="30" y="305">last_seen</text>
+  <text style="fill:var(--text)" x="30" y="323">last_camera</text>
+
+  <!-- tracks -->
+  <rect style="fill:var(--surface);stroke:var(--border)" x="290" y="60" width="240" height="322" rx="7"/>
+  <rect style="fill:var(--c3)" x="290" y="60" width="240" height="24" rx="7"/><text x="300" y="77" class="hdt" font-weight="700">tracks</text>
+  <text style="fill:var(--c4)" x="300" y="101" font-weight="700">track_row PK</text>
+  <text style="fill:var(--c5)" x="300" y="119" font-weight="700">camera_id FK</text>
+  <text style="fill:var(--text)" x="300" y="137">stream_epoch  ┐ UNIQUE</text>
+  <text style="fill:var(--text)" x="300" y="155">track_id      ┘ (with camera)</text>
+  <text style="fill:var(--text)" x="300" y="173">label</text>
+  <text style="fill:var(--text)" x="300" y="191">reid_class</text>
+  <text style="fill:var(--text)" x="300" y="209">start_ts</text>
+  <text style="fill:var(--text)" x="300" y="227">last_seen_ts</text>
+  <text style="fill:var(--text)" x="300" y="245">end_ts (NULL = open)</text>
+  <text style="fill:var(--text)" x="300" y="263">hits</text>
+  <text style="fill:var(--c5)" x="300" y="281" font-weight="700">global_id FK</text>
+  <text style="fill:var(--text)" x="300" y="299">identity_status</text>
+  <text style="fill:var(--text)" x="300" y="317">identity_score</text>
+  <text style="fill:var(--text)" x="300" y="335">identity_candidates</text>
+  <text style="fill:var(--text)" x="300" y="353">end_reason</text>
+  <text style="fill:var(--c3)" x="300" y="371" font-weight="700">embedding_id</text>
+
+  <!-- observations -->
+  <rect style="fill:var(--surface);stroke:var(--border)" x="610" y="60" width="240" height="232" rx="7"/>
+  <rect style="fill:var(--c3)" x="610" y="60" width="240" height="24" rx="7"/><text x="620" y="77" class="hdt" font-weight="700">observations</text>
+  <text style="fill:var(--c4)" x="620" y="101" font-weight="700">obs_id PK</text>
+  <text style="fill:var(--c5)" x="620" y="119" font-weight="700">track_row FK</text>
+  <text style="fill:var(--text)" x="620" y="137">camera_id</text>
+  <text style="fill:var(--text)" x="620" y="155">frame_seq</text>
+  <text style="fill:var(--text)" x="620" y="173">ts</text>
+  <text style="fill:var(--text)" x="620" y="191">x1 y1 x2 y2</text>
+  <text style="fill:var(--text)" x="620" y="209">dx1 dy1 dx2 dy2</text>
+  <text style="fill:var(--text)" x="620" y="227">confidence</text>
+  <text style="fill:var(--text)" x="620" y="245">label</text>
+  <text style="fill:var(--c5)" x="620" y="263" font-weight="700">clip_id FK</text>
+  <text style="fill:var(--text)" x="620" y="281">clip_frame</text>
+
+  <!-- clips -->
+  <rect style="fill:var(--surface);stroke:var(--border)" x="930" y="60" width="230" height="286" rx="7"/>
+  <rect style="fill:var(--c3)" x="930" y="60" width="230" height="24" rx="7"/><text x="940" y="77" class="hdt" font-weight="700">clips</text>
+  <text style="fill:var(--c4)" x="940" y="101" font-weight="700">clip_id PK</text>
+  <text style="fill:var(--c5)" x="940" y="119" font-weight="700">camera_id FK</text>
+  <text style="fill:var(--text)" x="940" y="137">stream_epoch</text>
+  <text style="fill:var(--text)" x="940" y="155">start_ts, end_ts</text>
+  <text style="fill:var(--c3)" x="940" y="173" font-weight="700">path (UNIQUE)</text>
+  <text style="fill:var(--text)" x="940" y="191">fps, frames</text>
+  <text style="fill:var(--text)" x="940" y="209">width, height</text>
+  <text style="fill:var(--text)" x="940" y="227">frame_ts (JSON)</text>
+  <text style="fill:var(--text)" x="940" y="245">size_bytes</text>
+  <text style="fill:var(--text)" x="940" y="263">sha256</text>
+  <text style="fill:var(--text)" x="940" y="281">status</text>
+  <text style="fill:var(--text)" x="940" y="299">created_ts</text>
+  </g>
+
+  <!-- FK lines -->
+  <g style="stroke:var(--muted)" stroke-width="1.6" fill="none" marker-end="url(#ah)">
+    <path d="M210,96 C250,96 250,114 288,114"/>
+    <path d="M210,246 C250,246 250,276 288,276"/>
+    <path d="M530,96 C570,96 570,114 608,114"/>
+    <path d="M930,96 C890,96 890,258 852,258"/>
+    <path d="M115,60 C115,40 1045,40 1045,58"/>
+  </g>
+  <g style="fill:var(--muted)" font-size="10.5">
+    <text x="560" y="36">cameras.camera_id → clips.camera_id</text>
+    <text x="222" y="268">1 : n</text>
+    <text x="552" y="90">1 : n</text>
+    <text x="872" y="186">1 : n</text>
+  </g>
+
+  <!-- second row: other stores -->
+  <rect style="stroke:var(--c2)" x="8" y="440" width="612" height="322" rx="12" fill="none" stroke-dasharray="5 4"/>
+  <text style="fill:var(--c2)" x="22" y="462" font-size="13" font-weight="700">ChromaDB  (cosine space · HNSW)</text>
+  <g font-size="11.5">
+  <rect style="fill:var(--surface);stroke:var(--border)" x="20" y="480" width="280" height="170" rx="7"/>
+  <rect style="fill:var(--c2)" x="20" y="480" width="280" height="24" rx="7"/><text x="30" y="497" class="hdt" font-weight="700">reid_person / reid_vehicle</text>
+  <text style="fill:var(--c4)" x="30" y="521" font-weight="700">id = "&lt;global_id&gt;:&lt;sha1[:24]&gt;"</text>
+  <text style="fill:var(--text)" x="30" y="539">embedding float32[2048]</text>
+  <text style="fill:var(--c3)" x="30" y="557" font-weight="700">meta.global_id</text>
+  <text style="fill:var(--text)" x="30" y="575">meta.camera_id</text>
+  <text style="fill:var(--text)" x="30" y="593">meta.ts</text>
+  <text style="fill:var(--muted)" x="30" y="617">≤ 20 exemplars per identity</text>
+  <text style="fill:var(--muted)" x="30" y="635">read by Track A only</text>
+
+  <rect style="fill:var(--surface);stroke:var(--border)" x="320" y="480" width="285" height="190" rx="7"/>
+  <rect style="fill:var(--c2)" x="320" y="480" width="285" height="24" rx="7"/><text x="330" y="497" class="hdt" font-weight="700">track_clip</text>
+  <text style="fill:var(--c4)" x="330" y="521" font-weight="700">id = "camera:epoch:track_id"</text>
+  <text style="fill:var(--text)" x="330" y="539">embedding float32[512]</text>
+  <text style="fill:var(--text)" x="330" y="557">meta.camera_id</text>
+  <text style="fill:var(--text)" x="330" y="575">meta.stream_epoch, meta.track_id</text>
+  <text style="fill:var(--text)" x="330" y="593">meta.global_id ("" if none)</text>
+  <text style="fill:var(--text)" x="330" y="611">meta.reid_class</text>
+  <text style="fill:var(--muted)" x="330" y="635">1 per track · read by Track B</text>
+  <text style="fill:var(--muted)" x="330" y="653">for "red jacket" ranking</text>
+
+  <rect style="fill:var(--surface);stroke:var(--border)" x="650" y="480" width="250" height="210" rx="7"/>
+  <rect style="fill:var(--c4)" x="650" y="480" width="250" height="24" rx="7"/><text x="660" y="497" class="hdt" font-weight="700">knowledge.db (Track B)</text>
+  <text style="fill:var(--text)" x="660" y="521" font-weight="700">aliases</text>
+  <text style="fill:var(--text)" x="660" y="539">kind, alias, scope  PK</text>
+  <text style="fill:var(--c3)" x="660" y="557" font-weight="700">target</text>
+  <text style="fill:var(--text)" x="660" y="575">source, created_ts, uses</text>
+  <text style="fill:var(--text)" x="660" y="601" font-weight="700">zones</text>
+  <text style="fill:var(--text)" x="660" y="619">camera_id, name  PK</text>
+  <text style="fill:var(--text)" x="660" y="637">x1 y1 x2 y2 (0..1)</text>
+  <text style="fill:var(--text)" x="660" y="655">created_ts</text>
+  <text style="fill:var(--muted)" x="660" y="679">target = camera / label / global_id</text>
+
+  <rect style="fill:var(--surface);stroke:var(--border)" x="930" y="480" width="230" height="150" rx="7"/>
+  <rect style="fill:var(--c1)" x="930" y="480" width="230" height="24" rx="7"/><text x="940" y="497" class="hdt" font-weight="700">clips/ (files)</text>
+  <text style="fill:var(--text)" x="940" y="521">YYYY-MM-DD/</text>
+  <text style="fill:var(--text)" x="940" y="539">  camera_id/</text>
+  <text style="fill:var(--text)" x="940" y="557">    startms_uuid8.mp4</text>
+  <text style="fill:var(--text)" x="940" y="581">H.264 · yuv420p · 5 fps</text>
+  <text style="fill:var(--text)" x="940" y="599">frame i = clip_frame</text>
+  <text style="fill:var(--muted)" x="940" y="617">served only by clip_id</text>
+  </g>
+
+  <!-- cross-store dashed links -->
+  <g style="stroke:var(--c3)" stroke-width="1.6" fill="none" stroke-dasharray="6 4" marker-end="url(#ah)">
+    <path d="M115,334 L115,478"/>
+    <path d="M415,382 C415,430 462,440 462,478"/>
+    <path d="M1045,346 L1045,478"/>
+    <path d="M720,478 C720,440 500,432 488,384"/>
+  </g>
+  <g style="fill:var(--c3)" font-size="10.5">
+    <text x="122" y="420">global_id</text>
+    <text x="472" y="428">embedding_id = id</text>
+    <text x="1052" y="420">path → file</text>
+    <text x="640" y="430">alias target (camera / global_id),</text><text x="640" y="443">checked at read time, no FK</text>
+  </g>
+</svg>
+</div>
+
+<h3 id="sqlite">5.6 <code>godseye.db</code>, table by table, column by column</h3>
+<p>Schema in <code>godseye/storage/db.py</code>, schema version 2 (stored in <code>PRAGMA user_version</code>; version 1 databases are migrated automatically by adding indexes). Example values come from the demo run.</p>
+
+<h4>Table <code>cameras</code> · one row per camera that has ever sent a frame</h4>
+<div class="tblwrap"><table>
+<tr><th>Column</th><th>Type</th><th>Example</th><th>Meaning</th><th>Why we store it / impact</th></tr>
+<tr><td class="k"><span class="tag t-pk">PK</span>camera_id</td><td>TEXT</td><td><code>lobby_cam</code></td><td>camera name from <code>config/ingest.yaml</code></td><td>Every other table points here. Track B builds its list of valid cameras from this table, so the LLM can never invent a camera.</td></tr>
+<tr><td class="k">first_seen</td><td>REAL</td><td><code>1791450900.0</code></td><td>epoch time of the first stored frame</td><td>Coverage check: if you ask about a time before this, the answer warns that the camera had no data then.</td></tr>
+<tr><td class="k">last_seen</td><td>REAL</td><td><code>1791450912.0</code></td><td>epoch time of the latest stored frame (updated every frame)</td><td>Coverage check and “cameras online” on the web console (seen in the last 120 s).</td></tr>
+</table></div>
+<p class="small">Written by: <code>INSERT … ON CONFLICT(camera_id) DO UPDATE SET last_seen=?</code> inside every frame's transaction.</p>
+
+<h4>Table <code>identities</code> · one row per cross-camera individual (<code>global_id</code>)</h4>
+<div class="tblwrap"><table>
+<tr><th>Column</th><th>Type</th><th>Example</th><th>Meaning</th><th>Why / impact</th></tr>
+<tr><td class="k"><span class="tag t-pk">PK</span>global_id</td><td>TEXT</td><td><code>person-92a28feeb303</code></td><td>class prefix + 12 random hex characters (UUID4)</td><td>The identity that links tracks on different cameras. Also the metadata key of the vectors in <code>reid_person</code>. Path questions filter on it.</td></tr>
+<tr><td class="k">reid_class</td><td>TEXT, CHECK in (person, vehicle)</td><td><code>person</code></td><td>which Re-ID model / gallery it belongs to</td><td>Persons are never matched against vehicles.</td></tr>
+<tr><td class="k">first_seen</td><td>REAL</td><td><code>1791450901.0</code></td><td>when the identity was created</td><td>History, sorting.</td></tr>
+<tr><td class="k">last_seen</td><td>REAL</td><td><code>1791450944.5</code></td><td>latest time any of its tracks was seen (only moves forward)</td><td>“Where was X last seen” context; indexed (<code>ix_ident_last</code>).</td></tr>
+<tr><td class="k">last_camera</td><td>TEXT</td><td><code>gate_cam</code></td><td>camera of that latest sighting</td><td>Quick “last known camera”; shown when the user must choose between candidates.</td></tr>
+</table></div>
+<p class="small">Written by: <code>PersistentGallery.new/add</code> (right after the Re-ID vector is saved in Chroma), and again by the frame transaction for every track that has a <code>global_id</code>. Track B checks this table before accepting any <code>global_id</code> in a plan, so a made-up id is rejected.</p>
+
+<h4>Table <code>tracks</code> · one row per tracked object on one camera (a “tracklet”)</h4>
+<div class="tblwrap"><table>
+<tr><th>Column</th><th>Type</th><th>Example</th><th>Meaning</th><th>Why / impact</th></tr>
+<tr><td class="k"><span class="tag t-pk">PK</span>track_row</td><td>INTEGER</td><td><code>1</code></td><td>internal row number</td><td>Short key for joins (observations point to it). Not shown to users.</td></tr>
+<tr><td class="k"><span class="tag t-fk">FK</span>camera_id</td><td>TEXT → cameras</td><td><code>lobby_cam</code></td><td>camera that saw it</td><td>Camera filters; part of the unique track key.</td></tr>
+<tr><td class="k">stream_epoch</td><td>INTEGER</td><td><code>0</code></td><td>connection number of the camera when the track existed</td><td>ByteTrack restarts numbering at 1 after a reconnect. Without this column, track 1 before and after a reconnect would collide.</td></tr>
+<tr><td class="k">track_id</td><td>INTEGER</td><td><code>1</code></td><td>ByteTrack's local number</td><td>Camera-local only. <b>Not</b> an identity. <code>UNIQUE(camera_id, stream_epoch, track_id)</code>.</td></tr>
+<tr><td class="k">label</td><td>TEXT</td><td><code>person</code></td><td>majority vote of the detector labels over the track</td><td>“How many cars…” filters on it (<code>ix_tracks_label_time</code>).</td></tr>
+<tr><td class="k">reid_class</td><td>TEXT</td><td><code>person</code></td><td>person | vehicle | other</td><td>Groups labels (car, truck, bus → vehicle); <code>other</code> tracks never get a global_id.</td></tr>
+<tr><td class="k">start_ts</td><td>REAL</td><td><code>1791450900.0</code></td><td>first time the track was seen</td><td>Time-window filters use overlap: <code>start_ts ≤ window_end AND last_seen_ts ≥ window_start</code>.</td></tr>
+<tr><td class="k">last_seen_ts</td><td>REAL</td><td><code>1791450905.5</code></td><td>latest time seen (updated every frame)</td><td>Sorting by recency; durations.</td></tr>
+<tr><td class="k">end_ts</td><td>REAL, <span class="tag t-null">NULL</span></td><td><code>1791450905.5</code></td><td>when the track was closed; NULL while still live</td><td>Crash recovery closes rows left NULL (partial index <code>ix_tracks_open</code>).</td></tr>
+<tr><td class="k">hits</td><td>INTEGER</td><td><code>12</code></td><td>number of sampled frames in which it was matched</td><td>A reliability signal; also decides when the CLIP vector is first stored (every 10 hits).</td></tr>
+<tr><td class="k"><span class="tag t-fk">FK</span>global_id</td><td>TEXT → identities, <span class="tag t-null">NULL</span></td><td><code>person-92a28feeb303</code></td><td>cross-camera identity, NULL if unresolved / ambiguous / other</td><td>The key for path reconstruction (<code>ix_tracks_global</code>). Counts report <code>count(DISTINCT global_id)</code> separately from track counts.</td></tr>
+<tr><td class="k">identity_status</td><td>TEXT</td><td><code>new</code> / <code>matched</code></td><td>unresolved | new | matched | ambiguous | not_applicable</td><td>Shown in answers so the user knows how sure the identity is.</td></tr>
+<tr><td class="k">identity_score</td><td>REAL, <span class="tag t-null">NULL</span></td><td><code>0.81</code></td><td>cosine similarity to the matched (or best) identity</td><td>Transparency: how close the match was.</td></tr>
+<tr><td class="k">identity_candidates</td><td>TEXT (JSON), <span class="tag t-null">NULL</span></td><td><code>[["person-…", 0.66], …]</code></td><td>top-3 candidates when <code>ambiguous</code></td><td>Lets a reviewer see who it might have been, without the system guessing.</td></tr>
+<tr><td class="k">end_reason</td><td>TEXT, <span class="tag t-null">NULL</span></td><td><code>lost_timeout</code></td><td>lost_timeout | stream_restart | shutdown | source_ended | source_failed | crash_recovered</td><td>Audit: why a track stopped.</td></tr>
+<tr><td class="k">embedding_id</td><td>TEXT, <span class="tag t-null">NULL</span></td><td><code>lobby_cam:0:1</code></td><td>id of this track's vector in Chroma <code>track_clip</code></td><td>The bridge from SQL to vector search. NULL until the track has 10 hits or ends.</td></tr>
+</table></div>
+
+<h4>Table <code>observations</code> · one row per tracked object per sampled frame</h4>
+<div class="tblwrap"><table>
+<tr><th>Column</th><th>Type</th><th>Example</th><th>Meaning</th><th>Why / impact</th></tr>
+<tr><td class="k"><span class="tag t-pk">PK</span>obs_id</td><td>INTEGER</td><td><code>1</code></td><td>row number</td><td>Used to attach the clip once it is published.</td></tr>
+<tr><td class="k"><span class="tag t-fk">FK</span>track_row</td><td>INTEGER → tracks</td><td><code>1</code></td><td>which track this sighting belongs to</td><td>Join to tracks; <code>UNIQUE(track_row, frame_seq)</code> makes re-writing a frame a no-op.</td></tr>
+<tr><td class="k">camera_id</td><td>TEXT</td><td><code>lobby_cam</code></td><td>copied from the track</td><td>Lets “what is at this point on this camera at this time” (point-and-click) use index <code>ix_obs_cam_ts</code> without a join.</td></tr>
+<tr><td class="k">frame_seq</td><td>INTEGER</td><td><code>0</code></td><td>sampled-frame number on that camera</td><td>Duplicate protection (with track_row).</td></tr>
+<tr><td class="k">ts</td><td>REAL</td><td><code>1791450900.0</code></td><td>capture time of that frame</td><td>Exact time of the sighting.</td></tr>
+<tr><td class="k">x1, y1, x2, y2</td><td>REAL ×4</td><td><code>20, 60, 70, 200</code></td><td>tracker box (Kalman-smoothed), original-frame pixels, top-left / bottom-right</td><td>Positions for paths, spatial filters (“left side”, zones) and the boxes drawn on the evidence video.</td></tr>
+<tr><td class="k">dx1, dy1, dx2, dy2</td><td>REAL ×4, <span class="tag t-null">NULL</span></td><td><code>21.5, 61.5, 71.5, 201.5</code></td><td>the raw detector box that frame</td><td>Evidence of exactly what the model saw, separate from the tracker's smoothed estimate.</td></tr>
+<tr><td class="k">confidence</td><td>REAL</td><td><code>0.74</code></td><td>tracker score for this frame</td><td>Averaged per track; answers flag tracks below 0.35 as low confidence. Best evidence = highest-confidence row.</td></tr>
+<tr><td class="k">label</td><td>TEXT</td><td><code>person</code></td><td>label at this frame</td><td>Audit of label changes.</td></tr>
+<tr><td class="k"><span class="tag t-fk">FK</span>clip_id</td><td>INTEGER → clips, <span class="tag t-null">NULL</span></td><td><code>1</code></td><td>the evidence clip containing this frame</td><td>Set <b>only after</b> the clip file is validated and published. NULL = no video for this sighting.</td></tr>
+<tr><td class="k">clip_frame</td><td>INTEGER, <span class="tag t-null">NULL</span></td><td><code>0</code></td><td>frame index inside that clip</td><td>Seek position: <code>clip_frame / fps</code> seconds into the video.</td></tr>
+</table></div>
+
+<h4>Table <code>clips</code> · one row per published evidence video</h4>
+<div class="tblwrap"><table>
+<tr><th>Column</th><th>Type</th><th>Example</th><th>Meaning</th><th>Why / impact</th></tr>
+<tr><td class="k"><span class="tag t-pk">PK</span>clip_id</td><td>INTEGER</td><td><code>1</code></td><td>clip number</td><td>The <b>only</b> way the web server accepts a video request (<code>/media/clip/1</code>). Clients can never send a file path.</td></tr>
+<tr><td class="k"><span class="tag t-fk">FK</span>camera_id</td><td>TEXT → cameras</td><td><code>lobby_cam</code></td><td>camera</td><td>“Newest clip per camera” for the video wall.</td></tr>
+<tr><td class="k">stream_epoch</td><td>INTEGER</td><td><code>0</code></td><td>connection number</td><td>A reconnect always starts a new clip.</td></tr>
+<tr><td class="k">start_ts, end_ts</td><td>REAL</td><td><code>…900.0</code>, <code>…905.5</code></td><td>capture time of first and last frame</td><td>Retention (<code>purge_clips</code> deletes by <code>end_ts</code>).</td></tr>
+<tr><td class="k">path</td><td>TEXT UNIQUE</td><td class="wrap"><code>2026-10-08/lobby_cam/1791450900000_a2567c72.mp4</code></td><td>file path relative to <code>clips/</code></td><td>Relative, so the store folder can be moved. The server also checks the resolved path stays inside <code>clips/</code>.</td></tr>
+<tr><td class="k">fps</td><td>REAL</td><td><code>5.0</code></td><td>playback frame rate</td><td>Converts <code>clip_frame</code> to seconds.</td></tr>
+<tr><td class="k">frames</td><td>INTEGER</td><td><code>12</code></td><td>frame count, confirmed by ffprobe</td><td>Validation and bounds for frame requests.</td></tr>
+<tr><td class="k">width, height</td><td>INTEGER</td><td><code>320</code>, <code>240</code></td><td>pixel size</td><td>Needed to turn normalised zones (0–1) into pixel boxes for spatial filters, and to draw boxes on the video.</td></tr>
+<tr><td class="k">frame_ts</td><td>TEXT (JSON list)</td><td><code>[1791450900.0, 1791450900.5, …]</code></td><td>real capture time of every frame in the clip</td><td>Because frames are sampled at 2–5 fps but play at 5 fps, a clip plays faster than real time. This list maps each frame back to its true time.</td></tr>
+<tr><td class="k">size_bytes</td><td>INTEGER</td><td><code>1763</code></td><td>file size at publish</td><td>Cheap integrity check on every answer and every download (mismatch → “clip is damaged”, HTTP 410).</td></tr>
+<tr><td class="k">sha256</td><td>TEXT (64 hex)</td><td class="wrap"><code>243bceb6…e9fa9eb</code></td><td>SHA-256 fingerprint of the file</td><td>Deep integrity check (<code>reconcile(deep=True)</code>), proves the evidence was not altered.</td></tr>
+<tr><td class="k">status</td><td>TEXT, CHECK in (complete, missing, corrupt)</td><td><code>complete</code></td><td>health of the file</td><td>Only <code>complete</code> clips are served. <code>reconcile(fix=True)</code> marks problems instead of deleting rows.</td></tr>
+<tr><td class="k">created_ts</td><td>REAL</td><td><code>1791496396.84</code></td><td>when the row was written</td><td>Audit.</td></tr>
+</table></div>
+
+<h3 id="indexes">5.7 Indexes and database settings</h3>
+<div class="tblwrap"><table>
+<tr><th>Index</th><th>Columns</th><th>Used by</th></tr>
+<tr><td class="k">ix_tracks_global</td><td>tracks(global_id)</td><td>path reconstruction, “where is person-…”</td></tr>
+<tr><td class="k">ix_tracks_cam_time</td><td>tracks(camera_id, start_ts, end_ts)</td><td>camera + time filters</td></tr>
+<tr><td class="k">ix_tracks_open</td><td>tracks(end_ts) WHERE end_ts IS NULL</td><td>finding tracks left open by a crash (partial index, stays tiny)</td></tr>
+<tr><td class="k">ix_tracks_start <span class="tag t-ix">v2</span></td><td>tracks(start_ts)</td><td>time-only questions</td></tr>
+<tr><td class="k">ix_tracks_label_time <span class="tag t-ix">v2</span></td><td>tracks(label, start_ts)</td><td>“persons in the last hour”. Verified in the demo: <code>SEARCH t USING INDEX ix_tracks_label_time (label=? AND start_ts&lt;?)</code></td></tr>
+<tr><td class="k">ix_tracks_class_time <span class="tag t-ix">v2</span></td><td>tracks(reid_class, start_ts)</td><td>class-level questions</td></tr>
+<tr><td class="k">ix_obs_cam_ts</td><td>observations(camera_id, ts)</td><td>point-and-click lookup</td></tr>
+<tr><td class="k">ix_obs_track</td><td>observations(track_row, ts)</td><td>best evidence, first/last position, average confidence</td></tr>
+<tr><td class="k">ix_obs_clip</td><td>observations(clip_id)</td><td>attaching / detaching clips, purge</td></tr>
+<tr><td class="k">ix_clips_cam_time</td><td>clips(camera_id, start_ts, end_ts)</td><td>latest clip per camera, frame size</td></tr>
+<tr><td class="k">ix_ident_last</td><td>identities(last_seen)</td><td>recent identities</td></tr>
+</table></div>
+<p>A test runs <code>EXPLAIN QUERY PLAN</code> on the main retrieval queries and fails if any of them would scan the whole <code>tracks</code> table.</p>
+<p><b>Connection settings</b> (<code>db.connect</code>): <code>journal_mode=WAL</code> (readers and the writer work at the same time), <code>synchronous=NORMAL</code> (safe with WAL, faster than FULL), <code>foreign_keys=ON</code> (SQLite enforces the FKs above), autocommit with explicit <code>BEGIN IMMEDIATE</code> transactions, <code>user_version</code> for schema migrations. Track B connects with <code>file:godseye.db?mode=ro</code> and <code>PRAGMA query_only=ON</code>: even a bug cannot write.</p>
+
+<h3 id="chroma">5.8 ChromaDB: the three collections</h3>
+<p>Client: <code>chromadb.PersistentClient(path="data/store/chroma")</code> with telemetry off. Every collection is created with <code>{"hnsw:space": "cosine"}</code> and <code>embedding_function=None</code> (Godseye always supplies its own vectors; Chroma never computes embeddings). Ids are deterministic, so every write is an <b>upsert</b> and repeating it is harmless.</p>
+
+<h4><code>reid_person</code> and <code>reid_vehicle</code> · the identity gallery</h4>
+<div class="tblwrap"><table>
+<tr><th>Part</th><th>Value</th><th>Meaning</th></tr>
+<tr><td class="k">id</td><td class="wrap"><code>person-92a28feeb303:04e2692c3aa05d994275efbd</code></td><td><code>global_id</code> + “:” + first 24 hex of SHA-1 of (id, camera, time, vector bytes)</td></tr>
+<tr><td class="k">embedding</td><td>2048 × float32, length 1 (demo: <code>dim=2048 norm=1.0000</code>)</td><td>one <b>exemplar</b>: a FastReID appearance vector of that individual</td></tr>
+<tr><td class="k">metadata</td><td><code>{global_id, camera_id, ts}</code></td><td>who it belongs to, where and when the crop was taken</td></tr>
+</table></div>
+<ul>
+  <li><b>Why several vectors per identity?</b> A person looks different from the front, the back, in shade or in sun. Each identity keeps up to <b>20 exemplars</b> (<code>max_exemplars</code>): the first one (usually the cleanest) and the most recent ones. Older middle ones are deleted.</li>
+  <li><b>Written</b> by <code>PersistentGallery.new()</code> (new identity) and <code>.add()</code> (matched identity, or a resolved track that keeps adding crops). The vector is written <b>first</b>, then the <code>identities</code> row.</li>
+  <li><b>Read</b> by <code>PersistentGallery.query()</code> during Re-ID: Chroma returns the 100 nearest exemplars (<code>chroma_query_k</code>), the code keeps the best score per <code>global_id</code>, and the resolver applies the 0.70 / 0.05 / 0.55 rules.</li>
+  <li><b>Why it matters:</b> this is the long-term memory of faces/appearances. Because it is persistent, <code>global_id</code>s survive a restart: a person seen yesterday gets the same id today if they match.</li>
+  <li>Track B <b>never reads</b> these collections.</li>
+</ul>
+
+<h4><code>track_clip</code> · one “what it looks like” vector per track</h4>
+<div class="tblwrap"><table>
+<tr><th>Part</th><th>Value</th><th>Meaning</th></tr>
+<tr><td class="k">id</td><td><code>lobby_cam:0:1</code></td><td>the track key <code>camera_id:stream_epoch:track_id</code>, identical to <code>tracks.embedding_id</code></td></tr>
+<tr><td class="k">embedding</td><td>512 × float32, length 1</td><td>average of the reused OWL-ViT detection embeddings of the track, re-normalised</td></tr>
+<tr><td class="k">metadata</td><td><code>{camera_id, stream_epoch, track_id, global_id, reid_class}</code></td><td><code>global_id</code> is <code>""</code> when the track has none (Chroma metadata cannot hold NULL)</td></tr>
+</table></div>
+<ul>
+  <li><b>Written</b> by <code>EvidenceStore</code> every 10th hit of a live track (<code>track_embed_every</code>) and once more when the track ends, with the final <code>global_id</code>.</li>
+  <li><b>Read</b> by Track B's retrieval when the question has a description: SQL first finds candidate tracks, then <code>track_clip.query(query_embeddings=[text vector], ids=[their embedding_ids])</code> ranks only those by cosine similarity.</li>
+  <li><b>Why it works:</b> the text “red jacket person” is embedded with the OWL-ViT <b>text</b> tower, which lives in the same CLIP space as the stored <b>image</b> vectors. Honest caveat: the ranking is relative, not a probability, and colour/clothing accuracy has not been validated on real footage.</li>
+</ul>
+
+<h3 id="clips">5.9 Clip store: the video evidence</h3>
+<ul>
+  <li><b>Layout:</b> <code>clips/{UTC date}/{camera_id}/{start time in ms}_{8 random hex}.mp4</code>. The date and camera folders keep directories small and make retention easy.</li>
+  <li><b>When recording happens:</b> only while a camera has at least one track. One segment per camera (shared by all its tracks), not one per track. A segment closes after <b>5 s</b> with no tracks (<code>idle_close_s</code>), after <b>60 s</b> maximum (<code>max_segment_s</code>), or on a reconnect / resolution change. No pre-roll.</li>
+  <li><b>Encoding:</b> raw BGR frames are piped to <b>ffmpeg</b> → libx264 H.264, CRF 26, preset veryfast, yuv420p, <code>+faststart</code> (playable while streaming), playback 5 fps, 2 encoder threads and no lookahead (measured: the defaults used ~240 MB RAM per camera and pushed 8 cameras into swap).</li>
+  <li><b>Playback speed:</b> frames are captured at 2–5 fps but play at 5 fps, so a clip can play faster than real life. The demo lobby clip covers 5.5 s of real time in 12 frames (2.4 s of video). <code>clips.frame_ts</code> gives each frame's real time.</li>
+  <li><b>Disk guard:</b> no new clip is started with less than 2 GiB free (<code>min_free_bytes</code>).</li>
+</ul>
+<h4>Publish protocol (why a clip in the database is always a real, playable file)</h4>
+<ol class="steps">
+  <li>Frames are written to <code>&lt;name&gt;.mp4.part</code>, never directly to the final name.</li>
+  <li>On close: ffmpeg must exit with code 0.</li>
+  <li><b>ffprobe</b> must confirm: codec is H.264, size matches, packet count equals the number of frames written.</li>
+  <li>SHA-256 and size are computed, the file is <code>fsync</code>ed to disk.</li>
+  <li>Atomic rename <code>.part</code> → <code>.mp4</code>, then the folder is fsynced.</li>
+  <li><b>Only now</b> the <code>clips</code> row is inserted and the waiting observations get their <code>clip_id</code>, in one transaction.</li>
+</ol>
+<p>If anything fails (ffmpeg missing or killed, low disk, validation): the <code>.part</code> is deleted, the observations keep <code>clip_id = NULL</code>, an ERROR is logged, <code>health()</code> counts it, and that camera's clips pause for 30 s. Metadata keeps flowing; only video is lost for that window. This is “degrade, don't crash”.</p>
+
+<h3 id="knowledge">5.10 <code>knowledge.db</code> (long-term learned memory) and short-term memory</h3>
+<p>Track B's own SQLite file, <code>data/store/knowledge.db</code> (<code>godseye/query/knowledge.py</code>). It stores what the <b>user taught</b> the system while answering clarification questions.</p>
+<h4>Table <code>aliases</code></h4>
+<div class="tblwrap"><table>
+<tr><th>Column</th><th>Type</th><th>Example</th><th>Meaning</th></tr>
+<tr><td class="k"><span class="tag t-pk">PK</span>kind</td><td>TEXT, CHECK in (camera, object, identity, zone)</td><td><code>camera</code></td><td>what kind of thing the alias names</td></tr>
+<tr><td class="k"><span class="tag t-pk">PK</span>alias</td><td>TEXT (normalised: lower case, punctuation removed)</td><td><code>north entrance</code></td><td>the user's words</td></tr>
+<tr><td class="k"><span class="tag t-pk">PK</span>scope</td><td>TEXT, default ''</td><td><code>gate_cam</code> (zones only)</td><td>for zones: which camera the name applies to</td></tr>
+<tr><td class="k">target</td><td>TEXT</td><td><code>gate_cam</code> / <code>person-92a28feeb303</code> / <code>car</code></td><td>the real camera id, identity or label it means</td></tr>
+<tr><td class="k">source</td><td>TEXT</td><td><code>user</code></td><td>who taught it</td></tr>
+<tr><td class="k">created_ts</td><td>REAL</td><td>epoch</td><td>when learned</td></tr>
+<tr><td class="k">uses</td><td>INTEGER</td><td><code>3</code></td><td>how often it has been used since</td></tr>
+</table></div>
+<h4>Table <code>zones</code></h4>
+<div class="tblwrap"><table>
+<tr><th>Column</th><th>Type</th><th>Meaning</th></tr>
+<tr><td class="k"><span class="tag t-pk">PK</span>camera_id, name</td><td>TEXT, TEXT</td><td>a named area on one camera, e.g. (<code>gate_cam</code>, <code>loading dock</code>)</td></tr>
+<tr><td class="k">x1, y1, x2, y2</td><td>REAL in 0–1</td><td>rectangle as fractions of the frame width/height, so it works at any resolution</td></tr>
+<tr><td class="k">created_ts</td><td>REAL</td><td>when drawn</td></tr>
+</table></div>
+<ul>
+  <li><b>When it is written:</b> only after an explicit user choice: picking a camera from the grid, picking an object type, clicking on a person (identity alias), drawing a zone. Pronouns (“he”) are never learned. The web console's memory panel lists these facts and lets you delete one.</li>
+  <li><b>When it is read:</b> by the resolver on every question (step “learned”, right after an exact name match) and when a question mentions a zone.</li>
+  <li><b>Safety:</b> a learned target is accepted only if it still exists in <code>godseye.db</code> (checked at read time, since there cannot be a foreign key across two files).</li>
+</ul>
+<h4>Memory levels, side by side</h4>
+<div class="tblwrap"><table>
+<tr><th>Memory</th><th>Lives in</th><th>Lifetime</th><th>Holds</th></tr>
+<tr><td>Evidence memory</td><td>godseye.db + chroma/ + clips/</td><td>permanent (manual clip retention)</td><td>everything the cameras saw</td></tr>
+<tr><td>Appearance memory</td><td>chroma <code>reid_*</code></td><td>permanent</td><td>what each known individual looks like</td></tr>
+<tr><td>Learned knowledge</td><td>knowledge.db</td><td>permanent until “forget”</td><td>names for cameras, identities, objects, zones</td></tr>
+<tr><td>Conversation memory</td><td>RAM: <code>Session.focus</code></td><td>per chat session, expires</td><td>the last 5 identities shown, so “he” / “that car” can be resolved</td></tr>
+</table></div>
+
+<h3 id="links">5.11 How the stores are linked (the real “record_id”)</h3>
+<div class="tblwrap"><table>
+<tr><th>Key</th><th>Format</th><th>Appears in</th><th>Lets you go from … to …</th></tr>
+<tr><td class="k">global_id</td><td><code>person-</code> + 12 hex</td><td>identities (PK), tracks.global_id (FK), Chroma <code>reid_*</code> id prefix + metadata, Chroma <code>track_clip</code> metadata, knowledge.db aliases.target</td><td>an individual ↔ all their tracks on all cameras ↔ their appearance vectors</td></tr>
+<tr><td class="k">track key</td><td><code>camera_id:stream_epoch:track_id</code></td><td>tracks (UNIQUE columns), tracks.embedding_id, Chroma <code>track_clip</code> id</td><td>a tracklet ↔ its description vector</td></tr>
+<tr><td class="k">track_row</td><td>integer</td><td>tracks (PK), observations.track_row (FK)</td><td>a tracklet ↔ every box, time and frame</td></tr>
+<tr><td class="k">clip_id</td><td>integer</td><td>clips (PK), observations.clip_id (FK), web URLs <code>/media/clip/&lt;id&gt;</code></td><td>a sighting ↔ its video</td></tr>
+<tr><td class="k">clips.path + clip_frame</td><td>relative path + frame index</td><td>clips.path, observations.clip_frame, the .mp4 on disk</td><td>a sighting ↔ the exact frame in the file</td></tr>
+<tr><td class="k">camera_id</td><td><code>[A-Za-z0-9_.-]{1,64}</code></td><td>every table, Chroma metadata, clip folder names, zones</td><td>anything ↔ its camera</td></tr>
+</table></div>
+
+<h3 id="writes">5.12 When things are written</h3>
+<p>Track A's service loop (<code>godseye/runtime/service.py</code>) takes one frame, runs perception, then calls <code>EvidenceStore.write(enriched_frame)</code>. Inside one call (<code>godseye/storage/store.py</code>), in this order:</p>
+<ol class="steps">
+  <li><b>Safety checks.</b> Camera id must be path-safe; if privacy masks are configured, the original must be masked, otherwise the frame is refused.</li>
+  <li><b>Vectors first (ChromaDB).</b> Upsert <code>track_clip</code> for tracks whose hits are a multiple of 10 and for tracks ending now. Idempotent.</li>
+  <li><b>Media second (clip).</b> If the camera has tracks, open a segment if needed and pipe this frame to ffmpeg; the frame's index becomes <code>clip_frame</code>. Clip problems degrade, never raise.</li>
+  <li><b>Metadata last (one SQLite transaction).</b> Upsert <code>cameras</code>; for each live track: upsert <code>identities</code> (if it has a global_id), upsert <code>tracks</code>, insert one <code>observations</code> row (<code>INSERT OR IGNORE</code>, so duplicates are skipped); for each ended track: set <code>end_ts</code>, <code>end_reason</code>, final <code>global_id</code> and <code>embedding_id</code>. Commit, or roll back everything on error.</li>
+  <li><b>Later, when the segment closes:</b> validate and publish the clip, then one transaction inserts the <code>clips</code> row and fills <code>clip_id</code> on the waiting observations.</li>
+</ol>
+<p>Separately, during the Re-ID step (inside perception, before <code>write</code>), <code>PersistentGallery</code> writes Re-ID exemplars to <code>reid_person/vehicle</code> and then the <code>identities</code> row. Same principle: the vector first, the row that refers to it second.</p>
+<div class="good"><b>The rule behind the order:</b> always write the thing that is pointed to <i>before</i> the thing that points to it. A crash in between can then only leave an <b>orphan</b> (a vector or file nobody points to, harmless and cleaned by reconcile), never a <b>dangling reference</b> (a row pointing to a missing vector or video, which would be a broken answer). Deleting goes the other way round: <code>purge_clips</code> removes the database reference first, then the file.</div>
+
+<h3 id="reads">5.13 When things are read (Track B, per question type)</h3>
+<p>All reads are parameterised SQL (values bound with <code>?</code>, never pasted into the SQL text) against the read-only connection. The plan decides which of these run.</p>
+<div class="tblwrap"><table>
+<tr><th>Moment</th><th>Store</th><th>What runs</th></tr>
+<tr><td>Resolving “the lobby”</td><td>godseye.db + knowledge.db</td><td><code>SELECT camera_id FROM cameras</code> (the only valid targets), then <code>aliases</code> lookup, fuzzy, semantic, LLM choice</td></tr>
+<tr><td>Validating the plan</td><td>godseye.db</td><td>camera exists, <code>SELECT 1 FROM identities WHERE global_id=?</code>, <code>SELECT 1 FROM tracks WHERE camera_id=? AND stream_epoch=? AND track_id=?</code></td></tr>
+<tr><td><b>find / locate / when_seen</b></td><td>godseye.db</td><td><code>SELECT … FROM tracks t WHERE t.camera_id IN (?) AND t.start_ts &lt;= ? AND t.last_seen_ts &gt;= ? AND t.label = ? ORDER BY t.last_seen_ts DESC LIMIT 2000</code> + average confidence from observations</td></tr>
+<tr><td>“in a red jacket”</td><td>Chroma <code>track_clip</code></td><td>embed text → <code>query(ids=&lt;candidate embedding_ids&gt;)</code> → sort by cosine similarity</td></tr>
+<tr><td>“on the left side” / a zone</td><td>godseye.db</td><td>box centres <code>(x1+x2)/2</code>, <code>(y1+y2)/2</code> in observations tested against the region × frame size from <code>clips.width/height</code></td></tr>
+<tr><td><b>count</b></td><td>godseye.db</td><td><code>SELECT count(*), count(DISTINCT t.global_id), sum(t.global_id IS NULL) FROM tracks t WHERE …</code> → “N tracks, K identified individuals, U unidentified tracks”</td></tr>
+<tr><td><b>path</b></td><td>godseye.db</td><td><code>SELECT … FROM tracks WHERE global_id=? ORDER BY start_ts</code>, then first/last observation of each track for positions</td></tr>
+<tr><td>Evidence for each result</td><td>godseye.db + clip files</td><td>highest-confidence observation <code>LEFT JOIN clips</code>; then check status is complete, file exists, size matches</td></tr>
+<tr><td>Coverage warning</td><td>godseye.db</td><td><code>cameras.first_seen / last_seen</code> vs the requested window</td></tr>
+<tr><td>User clicks on a person</td><td>godseye.db</td><td>observations JOIN tracks where the box contains the click, within ±3 s, smallest box first</td></tr>
+<tr><td>Playing evidence in the browser</td><td>godseye.db + clip files</td><td><code>/media/clip/&lt;clip_id&gt;</code> → path looked up by id, must stay inside <code>clips/</code>, status complete, size match; boxes from observations; thumbnails decoded with OpenCV from the stored clip</td></tr>
+</table></div>
+
+<h3 id="together">5.14 How the stores help each other</h3>
+<ol>
+  <li><b>SQLite narrows, Chroma ranks.</b> SQL cuts thousands of tracks down to “persons on lobby_cam this morning”; Chroma then orders only those by similarity to “red jacket”. Neither could do the job well alone.</li>
+  <li><b>Chroma decides identity, SQLite records it.</b> The Re-ID gallery in Chroma says “this is person-92a2…”; SQLite stores that on the track; path questions then just group tracks by <code>global_id</code>.</li>
+  <li><b>SQLite points into the video.</b> <code>clip_id</code> + <code>clip_frame</code> + <code>frame_ts</code> turn a database row into the exact second of video, and the boxes from observations are drawn on it.</li>
+  <li><b>knowledge.db translates human words into database keys</b> (camera ids, global_ids, zones), which then become SQL filters.</li>
+  <li><b>SQLite guards the others.</b> Reconcile compares SQLite with Chroma and the files to find orphans and missing or altered clips.</li>
+</ol>
+
+<h3 id="safety">5.15 Failures and consistency</h3>
+<div class="tblwrap"><table>
+<tr><th>What goes wrong</th><th>What happens</th></tr>
+<tr><td>A second writer process starts</td><td>Refused: <code>.lock</code> is held with <code>fcntl.flock</code> (“locked by another writer process”).</td></tr>
+<tr><td>SQLite or Chroma write fails</td><td>Exception, the frame's SQLite transaction rolls back (nothing partial). The service's circuit breaker pauses persistence with exponential back-off, counts every non-persisted frame (<code>frames_not_persisted</code>) and carries track endings to the next successful write. Cameras and AI keep running.</td></tr>
+<tr><td>Clip fails (no ffmpeg, low disk, encoder killed, bad probe)</td><td>Degraded: <code>.part</code> deleted, observations keep <code>clip_id = NULL</code>, error logged and counted, camera retried after 30 s. Answers say “no clip recorded”.</td></tr>
+<tr><td>Power cut / crash</td><td>On next start <code>recover()</code>: deletes leftover <code>.part</code> files, closes open tracks (<code>end_reason = crash_recovered</code>), detaches observations from unpublished clips. At most one open video segment per camera is lost; metadata is kept.</td></tr>
+<tr><td>The same frame is written twice</td><td>No effect: <code>UNIQUE(track_row, frame_seq)</code> + <code>INSERT OR IGNORE</code>, deterministic Chroma ids.</td></tr>
+<tr><td>Clip deleted or edited on disk</td><td>Every answer checks existence and size → <code>PARTIAL_EVIDENCE</code> with “clip file is missing / damaged”; the server returns HTTP 410. <code>reconcile(deep=True)</code> also catches same-size edits via SHA-256.</td></tr>
+<tr><td>Orphans (vector without identity, file without row, track vector without track)</td><td><code>reconcile()</code> reports them; <code>reconcile(fix=True)</code> removes orphans and marks bad clips <code>missing</code>/<code>corrupt</code>. It never deletes evidence that SQLite still references.</td></tr>
+</table></div>
+<p class="small">All of the above are covered by tests in <code>tests/test_storage.py</code> (21 tests: publish, frame-time mapping, epoch split, restart, gallery persistence, exemplar cap, duplicates, single writer, unsafe camera id, privacy refusal, missing ffmpeg, low disk, encoder death, Chroma failure, SQLite rollback, crash recovery, missing/corrupt clips, same-size corruption, orphan vectors, OS write failures, purge) and <code>tests/test_storage_real.py</code> (real video → real models → store → restart → database equals pipeline output).</p>
+
+<h3 id="growth">5.16 Growth, retention and privacy (be honest)</h3>
+<ul>
+  <li><b>Growth:</b> one <code>observations</code> row per tracked object per sampled frame. Example arithmetic (not a measurement): 10 people continuously visible at 5 fps = 50 rows per second on that camera. Vectors: up to 20 × 8 KB per identity, 2 KB per track. The real growth rate over days has <b>not been measured</b>.</li>
+  <li><b>Retention:</b> only clips can be purged (<code>purge_clips(before_ts)</code>, manual): files and clip rows go, track metadata stays with NULL clip references. No automatic schedule, no expiry of identities.</li>
+  <li><b>Privacy:</b> masks are enforced before storage. Not yet done: encryption at rest, deleting one person's data (the Re-ID vectors are biometric-like data).</li>
+</ul>
+</section>
+
+<!-- ============================================================ 6 -->
+<section id="understand" class="s4">
+<h2><span class="secbadge">4</span> Understand the question</h2>
+<p>Output of this section: a <code>ResolvedQueryContext</code> in which <b>every</b> value has been checked against real data. Code: <code>godseye/query/</code>.</p>
+<h3>Step 1 · LLM turns words into structured data</h3>
+<p>The question goes to Qwen3-8B with a system prompt and a JSON schema. The model can only fill this structure (<code>ParsedQuery</code>, <code>schema.py</code>):</p>
+<div class="tblwrap"><table>
+<tr><th>Field</th><th>Example for “show the guy in the red jacket on cam2 yesterday between 3pm and 5pm”</th></tr>
+<tr><td class="k">intent</td><td><code>find</code> (others: locate, track_path, count, when_seen, unknown)</td></tr>
+<tr><td class="k">object</td><td><code>{"label": "guy", "attributes": ["red jacket"]}</code></td></tr>
+<tr><td class="k">camera_mentions / location_text</td><td><code>["cam2"]</code></td></tr>
+<tr><td class="k">time</td><td><code>{"kind": "between", "day": "yesterday", "start_clock": "15:00", "end_clock": "17:00"}</code></td></tr>
+<tr><td class="k">referent</td><td><code>none</code> (would be <code>pronoun</code> for “he”, <code>demonstrative</code> for “that person”, <code>named</code> for “the delivery guy”)</td></tr>
+<tr><td class="k">spatial</td><td><code>none</code> (or left/right/top/bottom/center/in_zone/near_zone)</td></tr>
+</table></div>
+<p>Unknown fields are rejected (<code>extra=forbid</code>), strings have length limits, and one retry is allowed if the output does not validate. Text in the question is treated as data: prompt-injection tests confirm the database stays untouched.</p>
+<h3>Step 2 · Code does the time maths</h3>
+<p>The LLM only extracts “yesterday, 15:00–17:00”. <code>timeres.py</code> turns that into epoch seconds. This was a deliberate decision: during testing, the model answered “yesterday” with the wrong year. Times in the future are rejected with a clarification.</p>
+<h3>Step 3 · Referent resolver: words → real ids</h3>
+<p>Each mention (object, camera, identity) goes through a cascade, never jumping straight to the LLM. Every stage can only return one of the real candidates.</p>
+<ol class="steps">
+  <li><b>Exact</b>: normalised text equals a camera id / label, or a configured synonym.</li>
+  <li><b>Learned</b>: an alias in <code>knowledge.db</code>.</li>
+  <li><b>Fuzzy</b>: string similarity ≥ 0.85 and clearly ahead of the runner-up (typos like “lobyy”).</li>
+  <li><b>Semantic</b> (objects only): OWL-ViT text vectors, cosine ≥ 0.55 with a 0.10 margin (“guy” → person, “SUV” → car).</li>
+  <li><b>LLM choice</b>: the model picks an index from the offered list, or null. An index outside the list is discarded.</li>
+</ol>
+<p>Pronouns (“he”, “that car”) are resolved only from the conversation: the last identities shown in this session. One candidate → used; several → the user chooses; none → the user clicks on the person in a camera view.</p>
+<h3>Step 4 · Clarify if unsure (never guess)</h3>
+<div class="tblwrap"><table>
+<tr><th>Kind</th><th>When</th><th>Learned into knowledge.db?</th></tr>
+<tr><td>multiple choice</td><td>ambiguous object, several possible people</td><td>yes (object / identity alias), unless the phrase was a pronoun</td></tr>
+<tr><td>camera grid</td><td>“the north entrance” matches no camera</td><td>yes (camera alias)</td></tr>
+<tr><td>point and click</td><td>“the delivery guy” is unknown: click him on a frame → looked up in observations</td><td>yes (identity alias)</td></tr>
+<tr><td>region selection</td><td>“the loading dock” is unknown: draw a rectangle</td><td>yes (zone)</td></tr>
+<tr><td>free text</td><td>missing time or subject (the LLM may phrase the question)</td><td>no</td></tr>
+</table></div>
+<p>Invalid answers are re-asked; after 3 attempts for the same thing the question is rejected rather than looping forever.</p>
+</section>
+
+<!-- ============================================================ 7 -->
+<section id="answer" class="s5">
+<h2><span class="secbadge">5</span> Find &amp; answer</h2>
+<h3>Query planner (deterministic)</h3>
+<p><code>make_plan</code> maps intent → one of five allow-listed operations: <code>find_tracks</code>, <code>count_tracks</code>, <code>locate_latest</code>, <code>when_seen</code>, <code>path</code>. The <code>QueryPlan</code> holds camera, time, spatial, object and identity filters, an optional semantic text (attributes + label), a ranking (recency / confidence / duration / semantic) and a limit (default 10, max 50). <code>validate_plan</code> rejects it before any retrieval if a camera or identity does not exist, the time range is backwards, the label is unknown, the limit is too high or there is no subject. A rejected plan gives <code>SYSTEM_ERROR</code>, never a guessed answer.</p>
+<h3>Retrieve</h3>
+<p>SQL filter → optional spatial filter → optional Chroma similarity ranking → best evidence clip per result. Up to 2000 candidates; if that cap is hit the answer is marked partial and suggests narrowing.</p>
+<h3>Reconstruct path</h3>
+<p>For one <code>global_id</code>: tracks sorted by time; tracks on the same camera less than 30 s apart are merged into a <b>visit</b> (OBSERVED). Between two visits is a <b>transition</b>, always marked INFERRED (nobody saw the person walk between cameras), with a verdict:</p>
+<div class="tblwrap"><table>
+<tr><th>Verdict</th><th>Meaning</th></tr>
+<tr><td><code>plausible</code></td><td>gap ≥ fastest possible route in the configured camera topology</td></tr>
+<tr><td><code>unverified</code></td><td>no topology configured (the default today): the answer says so</td></tr>
+<tr><td><code>impossible_too_fast</code></td><td>faster than physically possible → warns that the global_id may cover two different people</td></tr>
+<tr><td><code>impossible_overlap</code></td><td>seen on two non-overlapping cameras at the same time</td></tr>
+<tr><td><code>impossible_no_route</code></td><td>no route between the cameras</td></tr>
+<tr><td><code>long_gap</code></td><td>more than 600 s apart: a new episode, no link claimed</td></tr>
+</table></div>
+<h3>Build response</h3>
+<p>Text comes from templates filled with retrieved values (camera, time, duration, identity and status, mean confidence, similarity, clip path and frame). Statuses: <code>OK</code>, <code>NO_RESULT</code> (with “this does not prove absence”), <code>PARTIAL_EVIDENCE</code> (missing clip, confidence below 0.35, unverified transitions, capped results, unidentified tracks in a count), <code>AMBIGUOUS_RESULT</code> (several individuals, choose one), <code>SYSTEM_ERROR</code>. Optional LLM rewording (off by default) is accepted only if every number, id and camera survives, nothing new is added, and OBSERVED/INFERRED labels are unchanged. Afterwards the identities shown are remembered in the session for follow-up pronouns.</p>
+</section>
+
+<!-- ============================================================ 8 -->
+<section id="journey">
+<h2>8 · One person, end to end (the demo scene)</h2>
+<p>Times are 2026-10-08 UTC; values are the demo store's real outputs. In the real system the identity decisions come from FastReID; in the demo they were fed in.</p>
+<div class="tblwrap"><table>
+<tr><th>Time</th><th>What happens</th><th>What gets written</th></tr>
+<tr><td>09:15:00.0</td><td>A person walks into <code>lobby_cam</code>. NanoOWL detects, ByteTrack starts track 1.</td><td><code>cameras</code> row; <code>tracks</code> row 1 (status unresolved, no global_id); <code>observations</code> row (clip_frame 0, clip_id NULL); clip segment <code>.part</code> opened.</td></tr>
+<tr><td>09:15:01.0</td><td>3rd good crop. FastReID vector, gallery is empty → <code>new</code>.</td><td>Chroma <code>reid_person</code> exemplar, then <code>identities</code> row <code>person-92a28feeb303</code>; track row gets the global_id.</td></tr>
+<tr><td>09:15:04.5</td><td>10th hit.</td><td>Chroma <code>track_clip</code> id <code>lobby_cam:0:1</code>; <code>tracks.embedding_id</code> set.</td></tr>
+<tr><td>09:15:05.5</td><td>Last seen; ByteTrack declares the track lost.</td><td><code>end_ts</code>, <code>end_reason = lost_timeout</code>, final <code>track_clip</code> vector.</td></tr>
+<tr><td>after the idle time</td><td>No tracks on the camera for longer than <code>idle_close_s</code> (5 s by default; the demo used 2 s) → segment closes.</td><td>ffmpeg → ffprobe → SHA-256 → rename → <code>clips</code> row 1 (12 frames, 320×240) and the 12 observations get <code>clip_id = 1</code>.</td></tr>
+<tr><td>09:15:40.0</td><td>Same person appears on <code>gate_cam</code> with a car. FastReID matches the gallery (score 0.81).</td><td>New track (gate_cam, track 1) with the <b>same</b> global_id, status <code>matched</code>; car = track 2, vehicle, no identity; 20 observations; clip 2.</td></tr>
+</table></div>
+<p>Now someone asks <em>“where did he go?”</em> right after being shown this person. “he” → <code>Session.focus</code> → <code>person-92a28feeb303</code> (method <code>context</code>). Plan: <code>path</code>. Retrieval: two tracks with that global_id. This is the exact answer the real <code>AnswerEngine</code> produced on the demo store (status <code>PARTIAL_EVIDENCE</code>, because the transition cannot be verified without a topology):</p>
+<pre><code>Reconstructed movement of person-92a28feeb303 on any camera in all stored data. OBSERVED = seen by a camera; INFERRED = deduced from timestamps, not observed.
+Path:
+  [OBSERVED] lobby_cam: 2026-10-08 09:15:00 UTC to 2026-10-08 09:15:05 UTC (6s), from (45,130px) to (133,130px); clip 2026-10-08/lobby_cam/1791450900000_a2567c72.mp4 frame 0
+  -> [INFERRED, unverified] no camera topology configured
+  [OBSERVED] gate_cam: 2026-10-08 09:15:40 UTC to 2026-10-08 09:15:44 UTC (4s), from (55,130px) to (109,130px); clip 2026-10-08/gate_cam/1791450940000_4b6c4dda.mp4 frame 0
+Caveats: no camera topology is configured: cross-camera transitions are UNVERIFIED inferences from timestamps</code></pre>
+<p>And <em>“how many people?”</em> gave: <code>2 track(s) of person were recorded on any camera in all stored data: 1 distinct identified individual(s) plus 0 track(s) with no cross-camera identity. Treat 2 as an upper bound on the number of unique objects.</code></p>
+<div class="bad"><b>Live demo trap (verified):</b> a camera named in a path question becomes a <b>filter</b>. “Where did he go <b>after the lobby</b>?” resolves “the lobby” to <code>lobby_cam</code>, and the path then keeps only lobby visits: the real engine returned just the lobby visit, with status <code>OK</code>, and dropped the gate. For a demo, ask “where did he go?” (no camera). If a juror asks, explain that places in a question are treated as filters, and that “after X” as a starting point is not supported yet.</div>
+</section>
+
+<!-- ============================================================ 9 -->
+<section id="qa">
+<h2>9 · Questions a jury is likely to ask</h2>
+<details class="qa"><summary>Why three (four) stores instead of one database?</summary><div>Different data shapes. Exact facts and relations → SQLite. Nearest-vector search → ChromaDB's HNSW index (SQL would have to scan every vector). Megabyte video → files that players can stream and seek. Track B's learned names go into a separate SQLite file so the chat side can never write to the evidence. The trade-off is no cross-store transaction, which we handle with write ordering, recovery and reconcile.</div></details>
+<details class="qa"><summary>What exactly is a vector here, and what does cosine similarity mean?</summary><div>A vector is a list of numbers produced by a neural network: 2048 numbers from FastReID describing a person's appearance, or 512 from OWL-ViT in CLIP space. All are normalised to length 1. Cosine similarity measures the angle between two vectors: 1 = same direction (very similar), 0 = unrelated. Chroma stores them in “cosine space” and returns distance = 1 − similarity.</div></details>
+<details class="qa"><summary>Can it find a “red handbag” or a “large suitcase”?</summary><div>Not today. The detector is open-vocabulary, but it is configured with prompts for people, cars, trucks, buses, motorcycles and bicycles only, and the question side accepts only those six labels. Adding a prompt such as “a photo of a suitcase” is a configuration change, and the storage schema already supports extra labels. What would still be missing: linking a bag to the person carrying it, a notion of physical size (“large” is only pixel size, which depends on distance), and cross-camera identity for bags (there is no Re-ID model for objects). Small objects are also harder for OWL-ViT B/32 at 768 px. Do not claim this works.</div></details>
+<details class="qa"><summary>What is the difference between track_id and global_id?</summary><div><code>track_id</code> is ByteTrack's local number on one camera (and one connection); it restarts after a reconnect. <code>global_id</code> comes from FastReID matching against the identity gallery and means “the same individual across cameras and over time”. They are separate columns and never substituted for each other.</div></details>
+<details class="qa"><summary>Can the LLM run SQL or delete data? What about prompt injection?</summary><div>No. The LLM only returns JSON that must match a strict schema. The planner is deterministic code with five allow-listed operations; all SQL is fixed text with bound parameters; Track B's database connection is read-only. Tests scan the query code for execution primitives and run real injection prompts against the real model to confirm nothing changes. The remaining risk is a misread question (e.g. a wrong camera), which is visible in the provenance.</div></details>
+<details class="qa"><summary>How do you prevent hallucinated answers?</summary><div>Answer text is produced from templates filled with database rows; every camera, id and time is checked to exist; “no result” is phrased as “nothing stored”, not “nothing happened”; failures produce SYSTEM_ERROR, not an empty answer. LLM rewording is off by default and, when on, is rejected if any number or id changes.</div></details>
+<details class="qa"><summary>What if two people look alike, or one person is split into two identities?</summary><div>Matching requires similarity ≥ 0.70 and a 0.05 lead over the next identity; anything unclear stays <code>ambiguous</code> with candidates listed. So splits (duplicate ids) are more likely than wrong merges, on purpose. If a wrong merge happens anyway, the path reconstructor flags impossible transitions (too fast / two places at once) and warns that the id may cover two objects.</div></details>
+<details class="qa"><summary>What if SQLite and ChromaDB disagree after a crash?</summary><div>Write order guarantees only orphans can exist (a vector without a row), never a row pointing to a missing vector or video. <code>recover()</code> runs on start; <code>reconcile()</code> lists orphans, missing/altered clips and identities without vectors, and <code>fix=True</code> cleans them without deleting referenced evidence.</div></details>
+<details class="qa"><summary>How do you know a clip is genuine and complete?</summary><div>It is only referenced after ffmpeg finished cleanly and ffprobe confirmed codec, size and frame count. Its size and SHA-256 are stored; every answer and download checks the size, and a deep reconcile re-computes the SHA-256.</div></details>
+<details class="qa"><summary>Why ChromaDB and not FAISS or pgvector?</summary><div>The specification requires ChromaDB. Practically, it gives persistence, ids, metadata filters and an HNSW index in an embedded library with no server, which fits one local machine. FAISS is only an index library (no persistence or metadata); pgvector needs a PostgreSQL server.</div></details>
+<details class="qa"><summary>Why Qwen3-8B and not Llama 3?</summary><div>It was the 8B model available on the machine; the deviation was approved and documented. It runs locally (no cloud), at temperature 0 with schema-constrained JSON. Switching is one config line plus re-running the LLM tests.</div></details>
+<details class="qa"><summary>How fast is it?</summary><div>Measured on an RTX 5050 laptop: detection ≈ 10 ms, Re-ID ≈ 13 ms, storage write ≈ 3 ms per frame; capture → stored in 29 ms (median) for one camera; about 29 sampled frames per second total (≈ 8 simulated cameras) with one pipeline thread. In the load test, the median question took 1.2 s with the local LLM and 1.9 s with the LLM on the Ray peer (earlier single LLM calls were measured at 2–8 s). These are single runs on one laptop, not a benchmark suite.</div></details>
+<details class="qa"><summary>Why are clips 5 fps and why do they play fast?</summary><div>Only sampled frames (2–5 fps) are analysed and recorded, which keeps CPU, RAM and disk manageable. They are encoded at a fixed 5 fps, so slower-sampled segments play faster than real time; <code>frame_ts</code> keeps the true time of each frame, and the evidence player uses it.</div></details>
+<details class="qa"><summary>What about privacy?</summary><div>Privacy masks can blur or black out regions before analysis and storage, and the store refuses unmasked frames when masks are configured. Everything runs locally; the web console is loopback-only with a token. Missing: encryption at rest, per-person deletion, automatic retention.</div></details>
+<details class="qa"><summary>Is it production-ready?</summary><div>No, and the project's own final audit says so: no real cameras or long soak test yet, Re-ID thresholds and camera topology need site calibration, no TLS or per-user accounts. Architecture conformance passed, and 228 tests pass (1 skipped: RTMP).</div></details>
+</section>
+
+<!-- ============================================================ 10 -->
+<section id="limits">
+<h2>10 · Honest limitations (from the project's own audit)</h2>
+<ul>
+  <li>Tested on synthetic streams and one non-CCTV video; no real cameras, no multi-hour soak test; RTMP is wired but not verified.</li>
+  <li>Only 6 object labels are detected and searchable (person, car, truck, bus, motorcycle, bicycle). Bags, suitcases and other carried objects are not detected or stored; there is no person↔object association.</li>
+  <li>Re-ID thresholds are uncalibrated defaults; vehicle Re-ID is unvalidated; attribute search (“red jacket”) is approximate.</li>
+  <li>Camera topology is a placeholder, so cross-camera transitions are reported as <code>unverified</code>.</li>
+  <li>Track A is a single pipeline thread (~29 sampled fps); more cameras need multiple processes (not built). ChromaDB access from two processes while writing is not verified.</li>
+  <li>Timestamps are wall-clock at capture, not stream PTS.</li>
+  <li>A camera named in a path question acts as a filter (“where did he go after the lobby?” shows only lobby visits). See the demo trap in <a href="#journey">section 8</a>.</li>
+  <li>Security is fine for one local user only: no TLS, single token, no encryption at rest, FastReID weights loaded with pickle and not checksum-verified.</li>
+  <li>Storage growth over days is unmeasured; only manual clip retention exists.</li>
+</ul>
+</section>
+
+<!-- ============================================================ 11 -->
+<section id="glossary">
+<h2>11 · Glossary</h2>
+<div class="tblwrap"><table>
+<tr><th>Term</th><th>Meaning</th></tr>
+<tr><td>ANN</td><td>Approximate nearest neighbour search: finds the closest vectors quickly, accepting a tiny chance of missing the exact best one.</td></tr>
+<tr><td>BGR / RGB</td><td>Order of the colour channels. OpenCV and GStreamer here use BGR; the models expect RGB.</td></tr>
+<tr><td>CLIP</td><td>Model family that puts images and text into the same vector space.</td></tr>
+<tr><td>CRF</td><td>Constant Rate Factor: x264 quality setting (lower = better quality, bigger file); 26 here.</td></tr>
+<tr><td>Embedding</td><td>Vector produced by a neural network to represent meaning or appearance.</td></tr>
+<tr><td>Epoch time</td><td>Seconds since 1970-01-01 00:00 UTC.</td></tr>
+<tr><td>Exemplar</td><td>One stored Re-ID vector of an identity; up to 20 per identity.</td></tr>
+<tr><td>FP16 / float32</td><td>16-bit and 32-bit floating-point numbers.</td></tr>
+<tr><td>HNSW</td><td>Hierarchical Navigable Small World graph, the vector index inside ChromaDB.</td></tr>
+<tr><td>Idempotent</td><td>Repeating an operation has no extra effect.</td></tr>
+<tr><td>IoU</td><td>Intersection over Union: overlap of two boxes, 0–1.</td></tr>
+<tr><td>Kalman filter</td><td>Predicts an object's next position from its motion.</td></tr>
+<tr><td>Letterbox</td><td>Resize keeping the aspect ratio and pad the rest.</td></tr>
+<tr><td>MOG2</td><td>Mixture-of-Gaussians background subtraction for motion detection.</td></tr>
+<tr><td>NMS</td><td>Non-Maximum Suppression: removes duplicate overlapping boxes.</td></tr>
+<tr><td>Open-vocabulary detection</td><td>Detecting objects described by any text, not a fixed class list.</td></tr>
+<tr><td>Re-ID</td><td>Re-identification: recognising the same individual across cameras by appearance.</td></tr>
+<tr><td>SHA-256</td><td>Cryptographic fingerprint of data, 64 hex characters.</td></tr>
+<tr><td>stream_epoch</td><td>Per-camera connection counter, +1 on every reconnect.</td></tr>
+<tr><td>TensorRT</td><td>NVIDIA's compiler/runtime that optimises neural networks for a specific GPU.</td></tr>
+<tr><td>Tracklet</td><td>One track on one camera (a <code>tracks</code> row).</td></tr>
+<tr><td>Upsert</td><td>Insert, or update if the key already exists.</td></tr>
+<tr><td>WAL</td><td>Write-Ahead Logging: SQLite mode allowing simultaneous readers and one writer.</td></tr>
+</table></div>
+</section>
+
+<footer>
+Source of truth: the code in this repository (<code>godseye/</code>, <code>config/</code>, <code>tests/</code>) and <code>CLAUDE.md</code>. If the code changes, re-check the numbers on this page.
+</footer>
+</main>
+</div>
+
+<script>
+(function(){
+  // theme toggle (remembered per browser when storage is available)
+  var root=document.documentElement, KEY='godseye-theme';
+  try{var saved=localStorage.getItem(KEY); if(saved) root.setAttribute('data-theme',saved);}catch(e){}
+  document.getElementById('themebtn').addEventListener('click',function(){
+    var cur=root.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+    var next=cur==='dark'?'light':'dark'; root.setAttribute('data-theme',next);
+    try{localStorage.setItem(KEY,next);}catch(e){}
+  });
+
+  // cosine calculator
+  function parse(s){return s.split(/[,\s]+/).filter(Boolean).map(Number);}
+  function cos(){
+    var a=parse(document.getElementById('va').value), b=parse(document.getElementById('vb').value), o=document.getElementById('cosout');
+    if(!a.length||a.length!==b.length||a.some(isNaN)||b.some(isNaN)){o.textContent='Enter two lists of numbers of the same length.';return;}
+    var dot=0,na=0,nb=0; for(var i=0;i<a.length;i++){dot+=a[i]*b[i];na+=a[i]*a[i];nb+=b[i]*b[i];}
+    if(!na||!nb){o.textContent='A vector of all zeros has no direction.';return;}
+    na=Math.sqrt(na); nb=Math.sqrt(nb); var c=dot/(na*nb);
+    var ua=a.map(function(x){return (x/na).toFixed(3)}), ub=b.map(function(x){return (x/nb).toFixed(3)});
+    o.textContent='normalised A = ['+ua.join(', ')+']   length 1\nnormalised B = ['+ub.join(', ')+']   length 1\n'+
+      'cosine similarity = '+c.toFixed(4)+'\nChroma cosine distance = 1 - similarity = '+(1-c).toFixed(4)+'\n'+
+      (c>=0.70?'(would count as a strong match at Godseye\'s Re-ID threshold 0.70)':c>=0.55?'(between 0.55 and 0.70: Godseye would call this ambiguous)':'(below 0.55: Godseye would treat it as a different identity)');
+  }
+  ['va','vb'].forEach(function(id){document.getElementById(id).addEventListener('input',cos);}); cos();
+
+  // SHA-256 (FIPS 180-4), pure JS so it works from file:// without crypto.subtle
+  var K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+  0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+  0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+  0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  function sha256(str){
+    var bytes=new TextEncoder().encode(str), l=bytes.length, n=((l+9+63)>>6)<<6, m=new Uint8Array(n);
+    m.set(bytes); m[l]=0x80; var bits=l*8;
+    m[n-4]=(bits>>>24)&255; m[n-3]=(bits>>>16)&255; m[n-2]=(bits>>>8)&255; m[n-1]=bits&255;
+    m[n-8]=Math.floor(bits/4294967296)&255;
+    var H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19], w=new Array(64);
+    function r(x,k){return (x>>>k)|(x<<(32-k));}
+    for(var o=0;o<n;o+=64){
+      for(var i=0;i<16;i++) w[i]=(m[o+4*i]<<24)|(m[o+4*i+1]<<16)|(m[o+4*i+2]<<8)|m[o+4*i+3];
+      for(i=16;i<64;i++){var s0=r(w[i-15],7)^r(w[i-15],18)^(w[i-15]>>>3), s1=r(w[i-2],17)^r(w[i-2],19)^(w[i-2]>>>10); w[i]=(w[i-16]+s0+w[i-7]+s1)|0;}
+      var a=H[0],b=H[1],c=H[2],d=H[3],e=H[4],f=H[5],g=H[6],h=H[7];
+      for(i=0;i<64;i++){
+        var S1=r(e,6)^r(e,11)^r(e,25), ch=(e&f)^(~e&g), t1=(h+S1+ch+K[i]+w[i])|0,
+            S0=r(a,2)^r(a,13)^r(a,22), mj=(a&b)^(a&c)^(b&c), t2=(S0+mj)|0;
+        h=g; g=f; f=e; e=(d+t1)|0; d=c; c=b; b=a; a=(t1+t2)|0;
+      }
+      H[0]=(H[0]+a)|0;H[1]=(H[1]+b)|0;H[2]=(H[2]+c)|0;H[3]=(H[3]+d)|0;H[4]=(H[4]+e)|0;H[5]=(H[5]+f)|0;H[6]=(H[6]+g)|0;H[7]=(H[7]+h)|0;
+    }
+    return H.map(function(x){return ('00000000'+(x>>>0).toString(16)).slice(-8);}).join('');
+  }
+  window.godseyeSha256=sha256;
+  function sh(){var v=document.getElementById('shain').value, h=sha256(v);
+    document.getElementById('shaout').textContent='SHA-256 = '+h+'\n('+h.length+' hex characters = 256 bits)';}
+  document.getElementById('shain').addEventListener('input',sh); sh();
+
+  // highlight the current section in the contents
+  var links=[].slice.call(document.querySelectorAll('nav.toc a')), map={};
+  links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a;});
+  var targets=Object.keys(map).map(function(id){return document.getElementById(id);}).filter(Boolean);
+  function onScroll(){var cur=null; for(var i=0;i<targets.length;i++){if(targets[i].getBoundingClientRect().top<120) cur=targets[i].id;}
+    links.forEach(function(a){a.classList.remove('on');}); if(cur&&map[cur]) map[cur].classList.add('on');}
+  addEventListener('scroll',onScroll,{passive:true}); onScroll();
+})();
+</script>
+</body>
+</html>
