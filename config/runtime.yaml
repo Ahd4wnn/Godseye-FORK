@@ -1,0 +1,11 @@
+# Phase 6 integration. Sub-config paths are relative to the project root.
+ingest: config/ingest.yaml
+perception: config/perception.yaml
+storage: config/storage.yaml
+query: config/query.yaml
+answer: config/answer.yaml
+quarantine_after: 5
+quarantine_s: 30
+store_fail_threshold: 3
+store_backoff_s: 5
+query_timeout_s: 120

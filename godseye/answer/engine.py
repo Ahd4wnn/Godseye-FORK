@@ -40,7 +40,7 @@ class AnswerEngine:
         if not db.exists():
             raise FileNotFoundError(f"{db} not found: run Track A (storage) first")
         self.cfg, self.llm, self.root = cfg, llm, root
-        self.conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=10)
+        self.conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=10, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA query_only=ON")
         self.schema_version = self.conn.execute("PRAGMA user_version").fetchone()[0]

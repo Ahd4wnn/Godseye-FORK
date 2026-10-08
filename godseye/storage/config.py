@@ -22,6 +22,10 @@ class StorageConfig:
     retry_after_s: float = 30.0          # after a clip failure, do not retry on that camera for this long
     crf: int = 26
     preset: str = "veryfast"
+    encoder_threads: int = 2             # per clip encoder; ffmpeg's default (all cores) cost ~240 MB RSS per camera (measured)
+    x264_params: str = "rc-lookahead=0:sync-lookahead=0:bframes=0"   # low-latency, low-memory encoding
+    encoder_threads: int = 2             # per clip encoder; ffmpeg's default (all cores) cost ~240 MB RSS per camera (measured)
+    x264_params: str = "rc-lookahead=0:sync-lookahead=0:bframes=0"   # low-latency, low-memory encoding
     ffmpeg: str = "ffmpeg"
     ffprobe: str = "ffprobe"
     chroma_query_k: int = 100            # exemplars fetched per gallery query (identity = best exemplar among them)
@@ -37,6 +41,12 @@ def parse(doc: dict | None) -> StorageConfig:
     c = StorageConfig(**doc)
     if c.clip_fps <= 0 or c.idle_close_s < 0 or c.max_segment_s <= 0 or not 0 <= c.crf <= 51:
         raise StorageConfigError("storage: clip_fps>0, idle_close_s>=0, max_segment_s>0, 0<=crf<=51 required")
+    import re
+    if not 1 <= c.encoder_threads <= 32 or not re.fullmatch(r"[A-Za-z0-9=:_.\-]*", c.x264_params):
+        raise StorageConfigError("storage: encoder_threads in 1..32 and x264_params limited to [A-Za-z0-9=:_.-]")
+    import re
+    if not 1 <= c.encoder_threads <= 32 or not re.fullmatch(r"[A-Za-z0-9=:_.\-]*", c.x264_params):
+        raise StorageConfigError("storage: encoder_threads in 1..32 and x264_params limited to [A-Za-z0-9=:_.-]")
     if c.chroma_query_k < 2 or c.max_exemplars < 2 or c.track_embed_every < 1:
         raise StorageConfigError("storage: chroma_query_k>=2, max_exemplars>=2, track_embed_every>=1 required")
     return c

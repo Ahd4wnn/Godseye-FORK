@@ -34,3 +34,10 @@
 25. **Schema v2 indexes** (tracks by label/class/start time) so retrieval never scans.
 26. **Semantic search = OWL-ViT text tower vs stored reused detection embeddings** (no new embedding model).
 27. **LLM rewording is opt-in and fact-checked against the template text.**
+
+## Phase 6 (details in CLAUDE.md, PHASE 6)
+28. **Failure isolation at the service boundary** (quarantine, storage circuit breaker, carried track endings), every drop counted.
+29. **Evidence-clip encoders limited to 2 threads / no lookahead** (measured: default x264 memory drove the machine into swap at 8 cameras).
+30. **FastReID runs fp16** (parity-tested). 
+31. **LLM on the Ray peer via a Python 3.11 loopback gateway**; perception stays local (VRAM was not the bottleneck; the link is ~13 MB/s).
+32. **Local web chat bound to loopback with token auth**; media only by clip id.

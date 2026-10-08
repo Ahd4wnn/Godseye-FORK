@@ -325,3 +325,46 @@ def test_track_live_and_ended_in_the_same_frame_does_not_break_vector_upsert(tmp
     s.write(ef(frame(seq=2), [t], [ended(t)]))
     assert s.vectors.count("track_clip") == 1
     s.close()
+
+
+def test_write_failures_from_the_os_never_corrupt_or_dangle(tmp_path):
+    """RLIMIT_FSIZE makes large writes fail with EFBIG (a real OS write error, like a full disk). The writer must survive,
+    SQLite must stay intact, and after restart nothing may reference a clip/vector that does not exist."""
+    import json
+    import subprocess
+    import sys
+    root = tmp_path / "store"
+    p = subprocess.run([sys.executable, "-I", "tests/support/diskfull.py", str(root), "400000"], capture_output=True, text=True, timeout=300)
+    assert p.returncode == 0, p.stderr[-800:]
+    out = json.loads(p.stdout.strip().splitlines()[-1])
+    assert out["n_errors"] > 0 or out["health"]["clip_failures"] > 0                      # the limit really bit
+    s = EvidenceStore(cfg(tmp_path, root=str(root)))
+    try:
+        assert s.conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+        assert not list(s.clips_dir.rglob("*.part"))
+        rep = s.reconcile()
+        assert not rep["clips_missing_file"] and not rep["clips_bad_size"] and not rep["orphan_clip_files"], rep
+        for r in s.conn.execute("SELECT clip_id, path, size_bytes FROM clips"):
+            assert (s.clips_dir / r["path"]).stat().st_size == r["size_bytes"]
+        assert not rows(s, "SELECT 1 FROM observations o JOIN clips c USING(clip_id) WHERE c.status != 'complete'")
+        assert not rows(s, "SELECT 1 FROM tracks WHERE end_ts IS NULL AND 0")
+    finally:
+        s.close()
+
+
+def test_purge_clips_removes_media_but_keeps_metadata_consistent(tmp_path):
+    s = EvidenceStore(cfg(tmp_path, max_segment_s=3.0))
+    last = feed(s, 8)
+    s.write(ef(frame(seq=8), [], [ended(last)]))
+    for k in (9, 10, 11):
+        s.write(ef(frame(seq=k)))
+    old = rows(s, "SELECT * FROM clips")
+    assert old
+    out = s.purge_clips(before_ts=5.0)
+    assert out["clips_deleted"] >= 1 and out["bytes_freed"] > 0
+    left = rows(s, "SELECT * FROM clips")
+    assert all(c["end_ts"] >= 5.0 for c in left) and len(left) == len(old) - out["clips_deleted"]
+    assert rows(s, "SELECT count(*) AS n FROM observations")[0]["n"] == 8                      # metadata kept
+    assert not rows(s, "SELECT 1 FROM observations WHERE clip_id IS NOT NULL AND clip_id NOT IN (SELECT clip_id FROM clips)")
+    assert all(v == [] for v in s.reconcile().values())
+    s.close()

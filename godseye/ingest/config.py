@@ -92,6 +92,14 @@ def redact_url(url: str) -> str:
     return re.sub(r"//[^/@]*@", "//***@", url)
 
 
+_CRED = re.compile(r"([A-Za-z][A-Za-z0-9+.\-]*://)[^/\s@]*@")
+
+
+def redact_text(text: str) -> str:
+    """Remove user:password@ from every URL inside free text (GStreamer / OS error messages often echo the source URL)."""
+    return _CRED.sub(r"\1***@", text)
+
+
 def _build(cls, data: dict | None, where: str, **overrides):
     data = dict(data or {})
     names = {f.name for f in dataclasses.fields(cls)}

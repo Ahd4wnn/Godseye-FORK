@@ -10,3 +10,4 @@ third_party/
 *.onnx
 *.onnx.data
 *.bin
+.venv-ray/

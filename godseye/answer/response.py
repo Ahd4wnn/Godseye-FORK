@@ -73,7 +73,7 @@ def clip_text(ev: Evidence | None) -> str:
         return "no stored observation"
     if ev.clip_status == "ok":
         return f"clip {ev.clip_path} frame {ev.clip_frame}"
-    return {"not_recorded": "no clip recorded", "missing_file": "clip file is missing on disk",
+    return {"not_recorded": "no clip recorded", "missing_file": "clip file is missing on disk", "corrupt_file": "clip file is damaged (size differs from the recorded size)",
             "marked_missing": "clip is marked missing", "marked_corrupt": "clip is marked corrupt"}[ev.clip_status]
 
 

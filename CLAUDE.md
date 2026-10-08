@@ -47,7 +47,7 @@ User → Chat UI → Local LLM / NLU → Referent Resolver → Clarification Eng
 Exact module layout and per-component interfaces: NOT YET DESIGNED (no code exists).
 
 # CURRENT PHASE
-Phase 5 — Query planning, retrieval, path reconstruction & response: implemented and tested (see PHASE 5 at the end), awaiting user acceptance before Phase 6. The Track B pipeline now runs end to end in a terminal chat; there is no web UI, no soak/performance testing and no multi-process deployment yet (Phase 6). Earlier caveats remain (RTMP unverified; Re-ID cross-domain accuracy; vehicle Re-ID unvalidated; 640-vs-768 input; Qwen instead of Llama 3).
+Phase 7 (final audit) done; awaiting user decisions on the blockers in PHASE 7. Previous: Phase 6 — End-to-end integration & hardening: implemented, measured and tested (see PHASE 6 at the end), awaiting user acceptance before Phase 7 (final audit). The two tracks run end to end on this machine; the LLM can run on the Ray peer. Open items are listed in PHASE 6 LIMITATIONS.
 Phase prompts live in `cctv_claude_code_prompts/` (master contract `00_*`, phases `01_`–`08_`). Docs required by the contract are in `docs/`.
 
 # PHASE STATUS
@@ -57,8 +57,8 @@ Phase prompts live in `cctv_claude_code_prompts/` (master contract `00_*`, phase
 - Phase 3 — Storage & evidence (ChromaDB, SQLite, clips): COMPLETE pending acceptance (retrieval NOT implemented by design; single-writer; clips need ffmpeg)
 - Phase 4 — Query understanding: COMPLETE pending acceptance (terminal chat only; LLM = qwen3:8b by user approval, NOT Llama 3)
 - Phase 5 — Retrieval, path reconstruction, response: COMPLETE pending acceptance (topology is a placeholder example until measured on site; attribute search is approximate)
-- Phase 6 — Integration & hardening: NOT STARTED
-- Phase 7 — Final audit: NOT STARTED
+- Phase 6 — Integration & hardening: COMPLETE pending acceptance (not soak-tested; no real cameras; web UI JavaScript not exercised in a browser; Ray cluster unauthenticated)
+- Phase 7 — Final audit: COMPLETE (2026-10-08) — see PHASE 7 at the end. Verdict: NOT READY for production
 
 # IMPLEMENTED COMPONENTS
 Verified by the tests listed in TEST STATUS:
@@ -69,8 +69,8 @@ Verified by the tests listed in TEST STATUS:
 - `godseye/ingest/preprocess.py` — privacy masks, letterbox 640, RGB float32 [0,1], coordinate transform with round-trip.
 - `godseye/ingest/manager.py` — `IngestManager` + bounded `FrameBus`.
 - `config/ingest.yaml` (ships with `cameras: []`), `docs/*.md`, `tests/`.
-Phase 2 (`godseye/perception/`): see PHASE 2 below. Phase 3 (`godseye/storage/`): see PHASE 3 below. Phase 4 (`godseye/query/`): see PHASE 4 below. Phase 5 (`godseye/answer/`): see PHASE 5 below.
-NOT implemented: Phases 6–7 (integration/hardening, final audit); no web UI.
+Phase 2 (`godseye/perception/`): see PHASE 2 below. Phase 3 (`godseye/storage/`): see PHASE 3 below. Phase 4 (`godseye/query/`): see PHASE 4 below. Phase 5 (`godseye/answer/`): see PHASE 5 below. Phase 6 (`godseye/runtime/`, `godseye/web/`, `godseye_remote/`, `tools/`): see PHASE 6 below.
+Phase 7 produced no code, only the audit.
 
 # TECHNOLOGY REQUIREMENTS
 
@@ -130,7 +130,7 @@ Planned responsibilities (none created yet):
 - Filesystem clips: evidence video clips. SQLite stores paths and time ranges. Layout: NOT DESIGNED.
 
 # TEST STATUS
-Command: `.venv/bin/python -m pytest tests -q` (2026-10-08, after Phase 5): **175 passed, 1 skipped** in about 214 s (Phase 5 added 40, plus 1 Phase 3 regression test) (skipped = RTMP integration test, needs `GODSEYE_TEST_RTMP_URL`). Phase 1 alone: 65 passed. Phase 2 tests: see PHASE 2 TESTS.
+Command: `.venv/bin/python -m pytest tests -q` (2026-10-08, after Phase 6): **222 passed, 1 skipped** in about 10.5 min (Phase 6 added 47; the real-model/LLM/cluster tests dominate the time) (skipped = RTMP integration test, needs `GODSEYE_TEST_RTMP_URL`). Phase 1 alone: 65 passed. Phase 2 tests: see PHASE 2 TESTS.
 Covered: config validation, preprocessing/coordinate round-trips, sampler rates (2 fps base, ~5 fps burst, static gating, keepalive), bus policies/fairness, multi-camera isolation, real RTSP and HLS ingest, disconnect/reconnect (stream_epoch), stall recovery, invalid/missing/404 streams, max_attempts, hw_accel failure, queue pressure, loop_file, runtime add/remove, shutdown, environment failure, malformed buffers.
 NOT covered: RTMP, real cameras, hardware decode, soak/performance. No performance numbers measured.
 
@@ -165,9 +165,9 @@ Pending (need user input): LLM choice (Qwen vs Llama 3), NanoOwl/FastReID weight
 2. Phase 2 (`cctv_claude_code_prompts/03_PHASE_2_AI_PERCEPTION.md`): FIRST verify NanoOwl package/weights/inference API and torch/TensorRT on the RTX 5050 (CUDA 13.2). If unverifiable, STOP and report per the master contract. Do not substitute YOLO or another detector.
 
 # NEXT ACTION
-1. User accepts or rejects Phase 5; supplies the real camera topology (travel times) and real site footage for calibration.
-2. Phase 6 (`07_*`): integration and hardening (run Track A and B together, web UI, concurrency between the Track A writer and Track B readers incl. ChromaDB multi-process access, retention, performance/soak).
-3. Still open: RTMP verification (Phase 1); Re-ID calibration + vehicle Re-ID data (Phase 2); Llama 3 vs Qwen (Phase 4); 640-vs-768 input spec.
+1. User accepts or rejects Phase 6. Useful inputs: real camera URLs + a soak run, the real camera topology (travel times), site footage for Re-ID threshold calibration, vehicle Re-ID data, an SHA-256 pin for the FastReID weights.
+2. Phase 7 (`08_*`): final audit of everything against the master contract and CLAUDE.md.
+3. Still open: RTMP verification (Phase 1); Llama 3 vs Qwen (Phase 4); 640-vs-768 input spec; multi-process Track A for more than ~6 busy cameras.
 
 # PHASE 2 — AI PERCEPTION (COMPLETE pending acceptance; verified 2026-10-08)
 ## Pipeline / modules (`godseye/perception/`)
@@ -282,3 +282,70 @@ Statuses: `OK`, `NO_RESULT` (valid query, nothing stored; text says this does no
 9. Bugs found by Phase 5 work and fixed: Phase 3 store raised a Chroma DuplicateIDError when a track was live and ended in the same frame (ids now deduped, regression test); the LLM-wording check first accepted a fabricated sentence and a relabelled INFERRED->OBSERVED step (check tightened, tests added).
 ## PHASE 5 DECISIONS
 Deterministic planner; allow-listed operations; every transition between observed visits is INFERRED and judged against an explicit topology (no topology => unverified, never silently plausible); statuses are mutually distinct and SYSTEM_ERROR never masquerades as NO_RESULT; index migration instead of accepting table scans; LLM wording opt-in with fact-preservation checks.
+
+# PHASE 6 — INTEGRATION & HARDENING (COMPLETE pending acceptance; verified 2026-10-08)
+Details: `docs/PERFORMANCE.md`, `docs/SECURITY.md`, `docs/CLUSTER.md`. Locked dependencies: `requirements.lock` (Python 3.12 venv), `requirements-ray.lock` (Python 3.11 `.venv-ray`).
+## Integration (`godseye/runtime/`)
+* `TrackAService` (single consumer thread): `IngestManager.get_frame` -> `PerceptionPipeline.process` -> `EvidenceStore.write`. Entry: `python -m godseye.runtime trackA` (reads `config/runtime.yaml` + the sub-configs). `build_track_a/build_track_b` wire from config; Track A and B can run in separate processes.
+* `QueryService` (Track B): question -> NLU -> resolver/clarification -> planner -> retrieval -> answer, with per-question timeout (`query_timeout_s`), bounded concurrency (`query_max_inflight`, excess = `busy`), bounded expiring sessions, exceptions converted to `error` results. `Failed` (LLM unavailable) is distinct from `Rejected` (question not understood).
+* Web chat (`python -m godseye.runtime web` -> `godseye/web/server.py`): loopback only, token login link printed at start, clarification buttons, point-and-click / area selection on stored clip frames, evidence video with seek. See SECURITY for the model. The JavaScript UI is covered by server-side tests only: it was NOT run in a browser here.
+* Terminal chat `python -m godseye.query.chat` now prints `[STATUS]` + the grounded answer.
+## Propagation verified (real components, `tests/test_integration.py::test_end_to_end_propagation`)
+camera_id (tracks, observations, clips, Chroma metadata), capture timestamps (inside the run window), `track_id` (unique per camera/epoch, camera-local), `global_id` (only on identified tracks, present in `identities`), embeddings (one 512-d `track_clip` vector per track), clip paths (file exists, ffprobe frame count equals the row, observation `clip_id` set only for published clips); Track B counts equal SQL counts.
+## Failure isolation (all tested with the real stack unless noted)
+* Dead camera (refused RTSP) does not affect the good camera, the service or queries. Model failure on one camera -> that camera is quarantined after `quarantine_after` failures (frames counted), others continue. GPU OOM (VRAM exhausted on purpose) -> frame dropped, counted, recovers when memory returns. Re-ID exceptions -> tracks emitted without a new identity (`identity_errors`).
+* Storage failure (SQLite error, ChromaDB error, SQLite lock contention) never stops ingestion or analytics: circuit breaker (`store_fail_threshold`, exponential back-off), every non-persisted frame counted (`frames_not_persisted`), track endings carried to the next successful write; after the run no track is left open and `PRAGMA integrity_check` is ok. Sources that end/fail get their tracks closed and persisted (retried).
+* Query failure (LLM down, timeout, busy, internal error) does not slow or stop ingestion (measured). Missing or damaged clips degrade answers to PARTIAL_EVIDENCE (`corrupt_file` = size differs from the recorded size) and the web server refuses them (410).
+* OS write failures (RLIMIT_FSIZE: EFBIG, the nearest no-root stand-in for a full disk): writer survives, SQLite intact, no dangling clip or vector references after restart. A genuine ENOSPC on a full filesystem was NOT tested.
+* LLM: `LLMUnavailable` vs invalid output; optional `llm_fallback_url` (loopback) used loudly when the primary fails; malformed output covered in Phase 4 tests.
+* Camera reconnect: a `stream_epoch` change ends all tracks with `stream_restart` and persists them (integration test with real frames); GStreamer-level reconnect/stall behaviour is the Phase 1 test set.
+## Cluster (Ray) — see `docs/CLUSTER.md`
+LLM (qwen3:8b via Ollama) runs on the peer RTX 3050 through `tools/ray_llm_gateway.py` (Python 3.11 venv, loopback gateway) + `godseye_remote/llm_proxy.py` (stdlib-only Ray actor). Everything else stays on this laptop (measured: VRAM was not the limit for perception, 2.1 GiB). Usage: `.venv-ray/bin/python tools/ray_llm_gateway.py` and `config/query.yaml: ollama_url: http://127.0.0.1:11435` (`llm_fallback_url: http://127.0.0.1:11434` recommended). Default config still points at the local Ollama; the gateway is opt-in. Deviation to note: the LLM is then a LAN peer, not the same machine.
+## Measurements (this machine; full tables in `docs/PERFORMANCE.md`)
+1 camera: 5.0 fps processed, e2e 29/43 ms (p50/p95), detect 10.3 ms, Re-ID 13 ms, store 2.8 ms, GPU util 8%. 4 cameras: 20.0 fps, 0 drops. 8 cameras: **3.3 fps (swap thrash)** before fixes -> **27.7-29.1 fps** after limiting x264 encoders (the measured cause: host RAM) and fp16 Re-ID. Capacity of the single pipeline thread is about 29 sampled fps. LLM on this GPU vs on the peer under 8-camera load: 24.6 vs 28.6 fps, detect p95 48.8 vs 15.7 ms, VRAM peak 7.2 vs 1.8 GiB; question latency 1.2 s vs 1.9 s median.
+## Security audit — see `docs/SECURITY.md`
+Fixed: camera passwords leaking through GStreamer error text into logs/health; venv not self-contained (`python-dotenv`). Open: no TLS/per-user auth on the web chat, no encryption at rest, no per-identity deletion, weights checksums not verified (`torch.load(weights_only=False)` on pinned checkpoints), unauthenticated Ray cluster (existing infrastructure).
+## PHASE 6 TESTS (47 new)
+`test_runtime_unit.py` (5, doubles, no GPU), `test_integration.py` (11, real stack + fault injection), `test_cluster.py` (8; 4 need the live Ray cluster and skip otherwise), `test_web.py` (11), `test_security.py` (9), plus in earlier files: Re-ID fp16 parity, OS write-failure, `purge_clips`, concurrent live+ended ids. Test-suite note: GPU modules unload the local Ollama model first (`conftest.py`); without that, loading perception next to the 6 GB local LLM runs out of 8 GB VRAM (reproduced).
+## PHASE 6 LIMITATIONS / ISSUES
+1. No soak test (hours/days), no real RTSP cameras, no hardware decode, no more than 8 simulated cameras, one video source (looped file). Throughput numbers are single runs on a loaded laptop (about 10 GB of RAM used by other apps, swap full before the runs).
+2. Track A is one pipeline thread: ~29 sampled fps. More cameras need multiple worker processes (not built). Cross-process Track A + Track B access to ChromaDB while the writer runs is tested only sequentially and via one process; Chroma's multi-process behaviour is unverified (use a snapshot or Chroma server if Track B runs in its own process under load). SQLite WAL readers are fine.
+3. Ray: cluster unauthenticated; a Python 3.11 venv and gateway process must be running; the peer must keep Ollama and `qwen3:8b`. Perception was not distributed (justified above); the 3050 is otherwise unused.
+4. Web UI: single shared token, HTTP (no TLS), global rate limit; JS never executed in a browser during this work.
+5. `EvidenceStore` is single-writer/process (lock file). Retention is manual (`purge_clips`); metadata and embeddings are kept indefinitely.
+6. Found and fixed in this phase: cross-thread SQLite use (store/knowledge/entities now `check_same_thread=False` + locks), `EvidenceStore` constructed on one thread and used on another, storage config `x264` memory, Retrieval clip-corruption check, credentials in error text, schema/venv issues listed above.
+## PHASE 6 DECISIONS
+Isolate by catching at the service boundary and counting (never silently); circuit breaker + carried track endings instead of dropping endings; encoder memory limits chosen from measurement; fp16 Re-ID with a parity test; LLM placed on the peer via a loopback gateway rather than distributing perception; web UI is local-only by construction; security checks are executable tests.
+
+# PHASE 7 — FINAL ARCHITECTURE CONFORMANCE AUDIT (2026-10-08)
+No functionality added. Re-ran the full suite: **222 passed, 1 skipped (RTMP, no server) in 13m42s**. Git state: Phase 6 files are staged but NOT committed.
+## Downgrade audit (grep of `godseye/`, `godseye_remote/`, `tools/`; ~6.7k LOC) — no substitution found
+* No YOLO/ultralytics (only comments). `cv2` is used for resize/MOG2/privacy masks/letterbox and the web server's decode of STORED clips; ingestion/decoding is GStreamer. `cv2.VideoCapture` appears once, in `web/server.py` (reading stored evidence, not a camera).
+* Tracking = vendored ByteTrack; Re-ID = FastReID checkpoint; vectors = ChromaDB `PersistentClient` (no `EphemeralClient`/in-memory path in production); structured data = SQLite. `json` is used only for columns/HTTP/LLM payloads, not as a store.
+* NLU = local LLM; the only `re` use in `godseye/query` is inside prompts' text, no keyword intent matcher. Planner is deterministic by design (documented), not a hidden hardcoded retrieval.
+* All Fake/Mock/Scripted classes are defined under `tests/`; none is imported by `godseye/`. `factory.py` wires the real classes only. The few "dummy/stub" hits in `godseye/` are warm-up input and a flush placeholder frame, not fake inference.
+## Component table (exists / implemented / right tech / tested)
+CCTV sources, RTSP, HLS, GStreamer, sampling, preprocessing: yes / yes / yes / tested on synthetic streams via real RTSP+HLS servers. **RTMP: wired, NOT verified.**
+NanoOWL, embedding reuse, ByteTrack, FastReID, ChromaDB, SQLite, clip storage: yes / yes / yes / tested (real models on one non-CCTV video; Market-1501 for Re-ID). Vehicle Re-ID unvalidated.
+Knowledge store, local LLM (qwen3:8b, approved deviation), referent resolver, clarification engine, planner, retrieval, path reconstruction, response builder: yes / yes / yes / tested (unit + real LLM).
+## Verdicts
+* Architecture Conformance: **PASS** (deviations: qwen3:8b instead of Llama 3, user-approved; `ffmpeg` for clip encoding; `torch.load(weights_only=False)` on pinned checkpoints).
+* Implementation Completeness: **PASS with gaps** (below).
+* Testing: **PASS for what exists, thin for production** (no real cameras, no soak, no browser run of the web JS, no real ENOSPC, no RTMP).
+* Security: **FAIL for any non-local deployment** (no TLS/per-user auth, no encryption at rest, no per-identity deletion, weights not checksum-verified, unauthenticated Ray). Acceptable for loopback single-user use only.
+* Performance: **PASS for <= 8 simulated cameras (~29 sampled fps single thread)**; unmeasured beyond that and over time.
+* Production Readiness: **NOT READY**.
+## Blockers (need user input)
+1. Real cameras and a soak run (hours/days); RTMP server or camera to verify RTMP.
+2. Re-ID thresholds uncalibrated; need real-site footage. Vehicle Re-ID has no validation data.
+3. Camera topology is a placeholder; path verdicts are `unverified` until measured.
+4. Auth/TLS decision if the web chat is ever exposed beyond loopback.
+## Technical debt
+* Track A is one pipeline thread (~29 fps); multi-process needed for more cameras. ChromaDB multi-process access while the writer runs is unverified.
+* No retention policy beyond manual `purge_clips`; `gallery_ttl_s` unimplemented; reconcile is manual.
+* Timestamps are wall-clock, not stream PTS. 640 vs 768 input spec conflict (detector uses `original_bgr`).
+* LLM-resolved camera/object matches are accepted without confirmation; attribute search (colour/clothing) unvalidated on real images.
+* System GStreamer lacks H.264 plugins; relies on `.gst-local/` extracted debs (not portable).
+* Test-count figures in per-phase notes are approximate; the pytest total above is authoritative.
+## NEXT ACTION
+Commit Phase 6/7 (user to say so), then supply the blocker inputs above. STOP per the Phase 7 contract.

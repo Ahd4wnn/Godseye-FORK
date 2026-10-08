@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from .config import QueryConfig
 from .entities import EntityIndex
 from .knowledge import KnowledgeStore, norm
-from .llm import LLMError, OllamaClient
+from .llm import LLMError, LLMUnavailable, OllamaClient
 from .nlu import Nlu, clean_user_text
 from .resolver import MentionResolver
 from .schema import (Clarification, Intent, Option, ParsedQuery, Provenance, Region, ResolvedQueryContext, TimeSpec)
@@ -41,6 +41,12 @@ class NeedsClarification:
 
 @dataclass
 class Rejected:
+    reason: str
+
+
+@dataclass
+class Failed:
+    """A system problem (e.g. the local LLM is down), distinct from a question we could not understand."""
     reason: str
 
 
@@ -111,6 +117,8 @@ class QueryUnderstanding:
         session.history.append(("user", text))
         try:
             parsed = self.nlu.parse(text, self.clock())
+        except LLMUnavailable as e:
+            return Failed(f"the language model is unavailable ({e})")
         except (LLMError, ValueError) as e:
             return Rejected(f"I could not understand that question ({e}). Please rephrase it.")
         if parsed.intent == Intent.unknown:
@@ -125,6 +133,8 @@ class QueryUnderstanding:
         c = p.clar
         try:
             err = getattr(self, f"_on_{c.kind}")(session, p, c, response)
+        except LLMUnavailable as e:
+            return Failed(f"the language model is unavailable ({e})")
         except (ValueError, TypeError, KeyError, ValidationError, LLMError) as e:
             err = f"Invalid answer: {e}"
         if isinstance(err, Clarification):                      # the answer needs a follow-up question

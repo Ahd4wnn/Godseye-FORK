@@ -27,9 +27,10 @@ class Evidence:
     bbox: tuple
     track_ref: tuple
     global_id: str | None
+    clip_id: int | None = None          # clips.clip_id (set only when the clip is playable: this is what a UI uses, never a path)
     clip_path: str | None = None        # relative to <store>/clips, only when the file exists
     clip_frame: int | None = None
-    clip_status: str = "not_recorded"   # ok | not_recorded | missing_file | marked_missing | marked_corrupt
+    clip_status: str = "not_recorded"   # ok | not_recorded | missing_file | corrupt_file | marked_missing | marked_corrupt
 
 
 @dataclass
@@ -191,7 +192,7 @@ class Retriever:
     # ---------------------------------------------------------------- evidence
     def best_evidence(self, t: Tracklet) -> Evidence | None:
         r = self.conn.execute(
-            "SELECT o.ts, o.confidence, o.x1, o.y1, o.x2, o.y2, o.clip_id, o.clip_frame, c.path, c.status FROM observations o "
+            "SELECT o.ts, o.confidence, o.x1, o.y1, o.x2, o.y2, o.clip_id, o.clip_frame, c.path, c.status, c.size_bytes FROM observations o "
             "LEFT JOIN clips c ON c.clip_id = o.clip_id WHERE o.track_row = ? ORDER BY o.confidence DESC LIMIT 1", (t.track_row,)).fetchone()
         if r is None:
             return None
@@ -201,8 +202,10 @@ class Retriever:
                 ev.clip_status = f"marked_{r['status']}"
             elif not (self.clips_dir / r["path"]).is_file():
                 ev.clip_status = "missing_file"
+            elif (self.clips_dir / r["path"]).stat().st_size != r["size_bytes"]:
+                ev.clip_status = "corrupt_file"
             else:
-                ev.clip_status, ev.clip_path, ev.clip_frame = "ok", r["path"], r["clip_frame"]
+                ev.clip_status, ev.clip_path, ev.clip_frame, ev.clip_id = "ok", r["path"], r["clip_frame"], r["clip_id"]
         return ev
 
     def identity_tracks(self, global_id: str) -> list[Tracklet]:
@@ -213,8 +216,8 @@ class Retriever:
                          mean_confidence=r["mean_conf"]) for r in rows]
 
     def end_positions(self, track_row: int) -> tuple:
-        q = "SELECT ts, (x1+x2)/2 AS cx, (y1+y2)/2 AS cy FROM observations WHERE track_row = ? ORDER BY ts %s LIMIT 1"
-        a, b = (self.conn.execute(q % d, (track_row,)).fetchone() for d in ("ASC", "DESC"))
+        a = self.conn.execute("SELECT ts, (x1+x2)/2 AS cx, (y1+y2)/2 AS cy FROM observations WHERE track_row = ? ORDER BY ts ASC LIMIT 1", (track_row,)).fetchone()
+        b = self.conn.execute("SELECT ts, (x1+x2)/2 AS cx, (y1+y2)/2 AS cy FROM observations WHERE track_row = ? ORDER BY ts DESC LIMIT 1", (track_row,)).fetchone()
         return (tuple(a) if a else None, tuple(b) if b else None)
 
     def coverage(self, plan: QueryPlan) -> dict:

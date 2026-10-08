@@ -15,7 +15,7 @@ from typing import Callable
 import numpy as np
 
 from ..gst_env import init_gst
-from .config import CameraConfig, redact_url
+from .config import CameraConfig, redact_text, redact_url
 from .preprocess import Preprocessor
 from .sampler import FrameSampler
 from .types import CameraState, CameraStats, PreprocessedFrame
@@ -122,14 +122,15 @@ class CameraPipeline:
                         return
                     err = None
                 except StreamError as e:
-                    delivered, err = self._epoch_delivered, str(e)
+                    delivered, err = self._epoch_delivered, redact_text(str(e))
                 except FatalCameraError as e:
-                    log.error("camera %s fatal: %s", self.cfg.camera_id, e)
-                    self._set(state=CameraState.FAILED, last_error=str(e))
+                    log.error("camera %s fatal: %s", self.cfg.camera_id, redact_text(str(e)))
+                    self._set(state=CameraState.FAILED, last_error=redact_text(str(e)))
                     return
                 except Exception as e:  # unexpected: keep the camera alive but never hide it
-                    log.exception("camera %s unexpected error", self.cfg.camera_id)
-                    delivered, err = False, f"unexpected: {e!r}"
+                    log.error("camera %s unexpected error: %s", self.cfg.camera_id, redact_text(repr(e)))
+                    log.debug("traceback (may contain the source URL)", exc_info=True)
+                    delivered, err = False, redact_text(f"unexpected: {e!r}")
                 if self._stop.is_set():
                     break
                 failures = 0 if delivered else failures + 1
@@ -274,6 +275,7 @@ class CameraPipeline:
 
     def _malformed(self, why: str) -> None:
         self._bump("malformed")
+        why = redact_text(why)
         self._set(last_error=why)
         if self._malformed_logged < 5 or self._stats.malformed % 100 == 0:
             self._malformed_logged += 1

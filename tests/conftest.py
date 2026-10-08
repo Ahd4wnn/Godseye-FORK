@@ -32,3 +32,25 @@ def make_cfg():
         return IngestConfig(plugin_paths=tuple(PLUGINS), preload_libs=tuple(PRELOAD), base_dir=str(ROOT),
                             cameras=tuple(parse_camera(c, {**base, **(defaults or {})}, i) for i, c in enumerate(cams)))
     return build
+
+
+# ---- GPU hygiene: the local LLM (qwen3:8b, ~6 GB) and the perception models do not fit in 8 GB VRAM together at load time.
+# In production the LLM runs on the Ray peer; in tests GPU-heavy modules unload the local one first (the real-LLM tests reload it).
+GPU_MODULES = {"test_perception_real", "test_storage_real", "test_answer_real", "test_integration"}
+
+
+def unload_local_llm(model: str = "qwen3:8b") -> None:
+    try:
+        import httpx
+        httpx.post("http://127.0.0.1:11434/api/generate", json={"model": model, "keep_alive": 0}, timeout=15)
+        import time
+        time.sleep(1.5)
+    except Exception:                                    # noqa: BLE001 - Ollama not running: nothing to unload
+        pass
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _free_gpu_for_perception(request):
+    if request.module.__name__.rsplit(".", 1)[-1] in GPU_MODULES:
+        unload_local_llm()
+    yield

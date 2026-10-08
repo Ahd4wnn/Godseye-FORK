@@ -14,6 +14,8 @@ Failure model
 from __future__ import annotations
 
 import fcntl
+import functools
+import threading
 import json
 import logging
 import re
@@ -40,6 +42,15 @@ class StorageError(RuntimeError):
     pass
 
 
+def _locked(fn):
+    """The store may be created on one thread and driven from another (service thread, shutdown on main): serialise it."""
+    @functools.wraps(fn)
+    def w(self, *a, **k):
+        with self._mu:
+            return fn(self, *a, **k)
+    return w
+
+
 class _Segment:
     def __init__(self, writer: ClipWriter, rel: str, epoch: int, w: int, h: int, ts: float):
         self.writer, self.rel, self.epoch, self.w, self.h = writer, rel, epoch, w, h
@@ -51,6 +62,7 @@ class _Segment:
 class EvidenceStore:
     def __init__(self, cfg: StorageConfig, base_dir: Path = ROOT):
         self.cfg = cfg
+        self._mu = threading.RLock()
         root = Path(cfg.root)
         self.root = root if root.is_absolute() else base_dir / root
         self.clips_dir = self.root / "clips"
@@ -79,6 +91,7 @@ class EvidenceStore:
         return T()
 
     # ------------------------------------------------------------------ write path
+    @_locked
     def write(self, ef: EnrichedFrame) -> None:
         src = ef.source
         cam = src.camera_id
@@ -242,10 +255,44 @@ class EvidenceStore:
             self.conn.executemany("UPDATE observations SET clip_id=? WHERE obs_id=?", [(cid, i) for i in seg.pending])
         self.stats["clips_written"] += 1
 
+    @_locked
+    def purge_clips(self, before_ts: float) -> dict:
+        """Privacy / retention: delete evidence clips (media + rows) whose last frame is older than `before_ts`. Track and
+        observation metadata is kept; their clip references become NULL (never dangling). SQLite first, then the file, so a
+        crash leaves at worst an orphan file that `reconcile` removes."""
+        rows = self.conn.execute("SELECT clip_id, path, size_bytes FROM clips WHERE end_ts < ?", (before_ts,)).fetchall()
+        live = {s.rel for s in self._seg.values()}
+        n = freed = 0
+        for r in rows:
+            if r["path"] in live:
+                continue
+            with self._txn():
+                self.conn.execute("UPDATE observations SET clip_id=NULL, clip_frame=NULL WHERE clip_id=?", (r["clip_id"],))
+                self.conn.execute("DELETE FROM clips WHERE clip_id=?", (r["clip_id"],))
+            (self.clips_dir / r["path"]).unlink(missing_ok=True)
+            n += 1
+            freed += r["size_bytes"]
+        return {"clips_deleted": n, "bytes_freed": freed}
+
+    @_locked
+    def end_tracks(self, camera_id: str, ended: tuple, ts: float, stream_epoch: int = 0) -> None:
+        """Persist track endings (and close the camera's clip) when no frame accompanies them: source ended, camera
+        removed, shutdown."""
+        from ..ingest.preprocess import compute_letterbox
+        from ..ingest.types import PreprocessedFrame
+        import numpy as np
+        if ended:
+            stub = PreprocessedFrame(camera_id, -1, -1, stream_epoch, ts, None, np.zeros((1, 1, 3), np.float32),
+                                     compute_letterbox(1, 1, 1), None, "end", None)
+            self.write(EnrichedFrame(stub, (), (), tuple(ended)))
+        self._close(camera_id)
+
     # ------------------------------------------------------------------ lifecycle
+    @_locked
     def close_camera(self, camera_id: str) -> None:
         self._close(camera_id)
 
+    @_locked
     def close(self) -> None:
         for cam in list(self._seg):
             self._close(cam)
@@ -253,6 +300,7 @@ class EvidenceStore:
         fcntl.flock(self._lock, fcntl.LOCK_UN)
         self._lock.close()
 
+    @_locked
     def health(self) -> dict:
         return {**self.stats, "open_segments": len(self._seg), "open_tracks": len(self._open), "recovered": self.recovered}
 
@@ -271,6 +319,7 @@ class EvidenceStore:
             log.warning("storage recovery after unclean shutdown: %s", r)
         return r
 
+    @_locked
     def reconcile(self, fix: bool = False, deep: bool = False) -> dict:
         """Cross-check SQLite <-> ChromaDB <-> clip files. Report always; repair only with fix=True.
         deep=True re-hashes every clip. Repairs never delete evidence that SQLite still references."""

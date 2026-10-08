@@ -3,14 +3,21 @@ validated by the caller. There is no tool-calling, no code execution and no file
 from __future__ import annotations
 
 import json
+import logging
 
 import httpx
 
 from .config import QueryConfig
 
+log = logging.getLogger("godseye.query")
+
 
 class LLMError(RuntimeError):
     pass
+
+
+class LLMUnavailable(LLMError):
+    """Ollama unreachable / timed out / erroring: a system condition, not a problem with the user's question."""
 
 
 _DROP = {"title", "default", "pattern", "minLength", "maxLength", "minimum", "maximum", "minItems", "maxItems", "description"}
@@ -37,28 +44,53 @@ class OllamaClient:
     def __init__(self, cfg: QueryConfig):
         self.cfg = cfg
         self.http = httpx.Client(base_url=cfg.ollama_url, timeout=cfg.timeout_s)
+        self.fallback = httpx.Client(base_url=cfg.llm_fallback_url, timeout=cfg.timeout_s) if cfg.llm_fallback_url else None
+        self.fallbacks_used = 0
+
+    def _tags(self, http) -> dict:
+        try:
+            r = http.get("/api/tags")
+            r.raise_for_status()
+            return r.json()
+        except (httpx.HTTPError, ValueError) as e:
+            raise LLMUnavailable(f"Ollama not reachable at {http.base_url}: {e}") from e
 
     def verify(self) -> dict:
         """Fail loudly if Ollama is down or the configured model is not installed (never silently substitute)."""
         try:
-            tags = self.http.get("/api/tags").json()
-        except (httpx.HTTPError, ValueError) as e:
-            raise LLMError(f"Ollama not reachable at {self.cfg.ollama_url}: {e}") from e
+            tags = self._tags(self.http)
+        except LLMUnavailable:
+            if self.fallback is None:
+                raise
+            log.warning("primary LLM %s unavailable at startup; verifying the fallback %s", self.cfg.ollama_url, self.cfg.llm_fallback_url)
+            tags = self._tags(self.fallback)
         names = {m["name"] for m in tags.get("models", [])}
         if self.cfg.model not in names and f"{self.cfg.model}:latest" not in names:
             raise LLMError(f"model {self.cfg.model!r} is not installed in Ollama (have: {sorted(names)})")
         return {"model": self.cfg.model, "installed": sorted(names)}
+
+    def _post(self, http, body: dict) -> str:
+        try:
+            r = http.post("/api/chat", json=body)
+            r.raise_for_status()
+            return r.json()["message"]["content"]
+        except httpx.HTTPError as e:
+            raise LLMUnavailable(f"LLM request failed: {e}") from e
+        except (KeyError, ValueError) as e:
+            raise LLMError(f"LLM request failed: {e}") from e
 
     def chat_json(self, system: str, user: str, schema: dict) -> dict:
         body = {"model": self.cfg.model, "stream": False, "think": False, "format": grammar_schema(schema),
                 "options": {"temperature": 0, "num_ctx": self.cfg.num_ctx},
                 "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
         try:
-            r = self.http.post("/api/chat", json=body)
-            r.raise_for_status()
-            text = r.json()["message"]["content"]
-        except (httpx.HTTPError, KeyError, ValueError) as e:
-            raise LLMError(f"LLM request failed: {e}") from e
+            text = self._post(self.http, body)
+        except LLMUnavailable as e:
+            if self.fallback is None:
+                raise
+            self.fallbacks_used += 1
+            log.warning("primary LLM unavailable (%s); using the fallback LLM (%d so far)", e, self.fallbacks_used)
+            text = self._post(self.fallback, body)
         if len(text) > 20000:
             raise LLMError("LLM output unreasonably long")
         try:

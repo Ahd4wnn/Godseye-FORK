@@ -203,3 +203,19 @@ def test_decode_matches_nanoowl_decode(pipe, video_frames):
     assert len(ref.scores) == len(ours["score"]) > 0
     assert torch.allclose(ref.scores.sort().values, ours["score"].sort().values, atol=1e-5)
     assert torch.allclose(ref.boxes.sort(dim=0).values, enc.pred_boxes[0][ours["patch"]].sort(dim=0).values, atol=1e-3)
+
+
+def test_reid_fp16_matches_fp32(pipe):
+    """The fp16 speed-up must not change identities: features within cosine 0.999 and similarities within 0.01."""
+    import dataclasses
+
+    from godseye.perception.reid import FastReIDExtractor
+    by = _market()
+    files = [f for p in sorted(by)[:12] for c in sorted(by[p])[:2] for f in by[p][c][:2]]
+    half = pipe.extractors["person"]
+    assert half.half
+    full = FastReIDExtractor(dataclasses.replace(half.cfg, precision="fp32"))
+    assert not full.half
+    a, b = _feats(half, files), _feats(full, files)
+    assert (a * b).sum(1).min() > 0.999
+    assert np.abs(a @ a.T - b @ b.T).max() < 0.01

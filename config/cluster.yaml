@@ -1,0 +1,8 @@
+# Ray cluster placement (see CLAUDE.md, PHASE 6 / CLUSTER). The LLM (qwen3:8b via Ollama) runs on a peer laptop's GPU; this machine keeps
+# ingest + perception + storage. The gateway runs under Python 3.11 (.venv-ray) because the Ray cluster is Python 3.11 / Ray 2.40.
+ray_address: 10.90.158.130:6379      # Ray head (GCS)
+llm_node_ip: 10.90.158.67            # node whose local Ollama serves the LLM
+allowed_models: [qwen3:8b]
+gateway_host: 127.0.0.1              # loopback only
+gateway_port: 11435                  # set query.yaml ollama_url: http://127.0.0.1:11435 to use it
+call_timeout_s: 120

@@ -16,6 +16,7 @@ class QueryConfigError(ValueError):
 class QueryConfig:
     ollama_url: str = "http://127.0.0.1:11434"
     model: str = "qwen3:8b"            # DEVIATION from the Llama 3 8B in the spec: user-approved 2026-10-08 (only Qwen models installed)
+    llm_fallback_url: str = ""         # optional second LOOPBACK Ollama used (loudly) when the primary is unavailable
     num_ctx: int = 4096
     timeout_s: float = 90.0
     llm_retries: int = 1               # extra attempts when the LLM output fails validation
@@ -42,8 +43,9 @@ def parse(doc: dict | None) -> QueryConfig:
         if k in doc:
             doc[k] = tuple(tuple(x) if isinstance(x, list) else x for x in doc[k])
     c = QueryConfig(**doc)
-    if not c.ollama_url.startswith(("http://127.0.0.1", "http://localhost")):
-        raise QueryConfigError("ollama_url must be local (no cloud LLM in the query path)")
+    for u in (c.ollama_url, c.llm_fallback_url):
+        if u and not u.startswith(("http://127.0.0.1", "http://localhost")):
+            raise QueryConfigError("ollama_url / llm_fallback_url must be loopback (the LLM is local, or reached through the loopback Ray gateway)")
     if not (0 < c.fuzzy_threshold <= 1 and 0 < c.semantic_threshold <= 1) or c.max_query_chars < 10:
         raise QueryConfigError("query: thresholds must be in (0,1], max_query_chars >= 10")
     return c

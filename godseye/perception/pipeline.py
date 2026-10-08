@@ -39,6 +39,7 @@ class PerceptionPipeline:
         self.extractors = extractors
         self.resolver = IdentityResolver(cfg.identity, gallery)
         self._cams: dict[str, CameraTracker] = {}
+        self.identity_errors = 0
 
     def process(self, frame: PreprocessedFrame) -> EnrichedFrame:
         t = {}
@@ -60,7 +61,11 @@ class PerceptionPipeline:
         t["track"] = (time.perf_counter() - t0) * 1e3
 
         t0 = time.perf_counter()
-        self._identify(frame, dets, live)
+        try:
+            self._identify(frame, dets, live)
+        except Exception:                                   # noqa: BLE001 - Re-ID is optional per frame: keep detections + tracks
+            self.identity_errors += 1
+            log.exception("Re-ID failed on %s frame %d: tracks are emitted without a new identity", frame.camera_id, frame.frame_seq)
         t["identity"] = (time.perf_counter() - t0) * 1e3
 
         for m, _ in ended:

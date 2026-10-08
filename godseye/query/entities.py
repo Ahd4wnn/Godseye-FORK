@@ -9,7 +9,7 @@ class EntityIndex:
     def __init__(self, db_path: Path):
         if not db_path.exists():
             raise FileNotFoundError(f"{db_path} not found: run Track A (storage) first")
-        self.conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=10)
+        self.conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=10, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA query_only=ON")
 

@@ -71,6 +71,9 @@ class FastReIDExtractor:
         self.model = build_model(fr).eval()
         load_checkpoint_strict(self.model, w)
         self.model.to(self.device)
+        self.half = cfg.precision == "fp16" and str(self.device).startswith("cuda")
+        if self.half:
+            self.model.half()
         self.weights_name = w.name
 
     def crop(self, bgr: np.ndarray, bbox) -> np.ndarray | None:
@@ -99,7 +102,7 @@ class FastReIDExtractor:
                 img = cv2.resize(rgb, self.size_hw[::-1], interpolation=cv2.INTER_CUBIC)   # as FastReID demo
                 batch.append(torch.as_tensor(img.astype("float32").transpose(2, 0, 1)))
             x = torch.stack(batch).to(self.device)
-            f = self.model(x)
+            f = self.model(x.half() if self.half else x).float()
             if not torch.isfinite(f).all():
                 raise ReidError("non-finite ReID features")
             outs.append(torch.nn.functional.normalize(f, dim=1).cpu().numpy())

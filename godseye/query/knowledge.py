@@ -2,7 +2,9 @@
 Track A's `godseye.db`. All SQL is parameterised; no value from the LLM or the user is ever interpolated into SQL."""
 from __future__ import annotations
 
+import functools
 import json
+import threading
 import re
 import sqlite3
 import time
@@ -25,14 +27,24 @@ def norm(s: str) -> str:
     return re.sub(r"[^a-z0-9 ]+", "", re.sub(r"[\s_\-]+", " ", s.lower())).strip()
 
 
+def _locked(fn):
+    @functools.wraps(fn)
+    def w(self, *a, **k):
+        with self._mu:
+            return fn(self, *a, **k)
+    return w
+
+
 class KnowledgeStore:
     def __init__(self, path: Path):
+        self._mu = threading.RLock()
         path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(path, timeout=10)
+        self.conn = sqlite3.connect(path, timeout=10, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.executescript(SCHEMA)
 
+    @_locked
     def learn(self, kind: str, alias: str, target: str, source: str = "user", scope: str = "") -> None:
         if kind not in KINDS:
             raise ValueError(f"unknown alias kind {kind!r}")
@@ -44,6 +56,7 @@ class KnowledgeStore:
                               "ON CONFLICT(kind,alias,scope) DO UPDATE SET target=excluded.target, source=excluded.source",
                               (kind, a, scope, target, source, time.time()))
 
+    @_locked
     def lookup(self, kind: str, alias: str, scope: str | None = None) -> list[str]:
         q, args = "SELECT target FROM aliases WHERE kind=? AND alias=?", [kind, norm(alias)]
         if scope is not None:
@@ -54,13 +67,16 @@ class KnowledgeStore:
                 self.conn.execute("UPDATE aliases SET uses=uses+1 WHERE kind=? AND alias=?", [kind, norm(alias)])
         return list(dict.fromkeys(rows))
 
+    @_locked
     def aliases(self, kind: str) -> dict[str, str]:
         return {r["alias"]: r["target"] for r in self.conn.execute("SELECT alias,target FROM aliases WHERE kind=?", (kind,))}
 
+    @_locked
     def forget(self, kind: str, alias: str) -> int:
         with self.conn:
             return self.conn.execute("DELETE FROM aliases WHERE kind=? AND alias=?", (kind, norm(alias))).rowcount
 
+    @_locked
     def save_zone(self, camera_id: str, name: str, x1: float, y1: float, x2: float, y2: float) -> None:
         if not (0 <= x1 < x2 <= 1 and 0 <= y1 < y2 <= 1):
             raise ValueError("zone must be a non-empty rectangle in normalised [0,1] coordinates")
@@ -68,10 +84,12 @@ class KnowledgeStore:
             self.conn.execute("INSERT OR REPLACE INTO zones VALUES(?,?,?,?,?,?,?)", (camera_id, norm(name), x1, y1, x2, y2, time.time()))
         self.learn("zone", name, json.dumps([camera_id, norm(name)]), "user", scope=camera_id)
 
+    @_locked
     def zones(self, name: str, camera_ids: list[str] | None = None) -> list[dict]:
         rows = self.conn.execute("SELECT * FROM zones WHERE name=?", (norm(name),)).fetchall()
         return [dict(r) for r in rows if camera_ids is None or not camera_ids or r["camera_id"] in camera_ids]
 
+    @_locked
     def zone_names(self) -> list[str]:
         return sorted({r[0] for r in self.conn.execute("SELECT name FROM zones")})
 

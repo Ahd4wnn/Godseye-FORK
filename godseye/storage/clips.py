@@ -60,6 +60,8 @@ class ClipWriter:
         cmd = [cfg.ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "bgr24",
                "-s", f"{width}x{height}", "-r", str(cfg.clip_fps), "-i", "-",
                "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2", "-c:v", "libx264", "-preset", cfg.preset, "-crf", str(cfg.crf),
+               "-threads", str(cfg.encoder_threads), *(["-x264-params", cfg.x264_params] if cfg.x264_params else []),
+               "-threads", str(cfg.encoder_threads), *(["-x264-params", cfg.x264_params] if cfg.x264_params else []),
                "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-f", "mp4", str(self.part)]
         try:
             self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
