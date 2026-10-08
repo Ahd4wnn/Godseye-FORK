@@ -1,0 +1,41 @@
+# Phase 2 perception config. Paths are relative to the project root.
+detector:
+  model_name: google/owlvit-base-patch32    # NanoOwl-supported OWL-ViT checkpoints: base-patch32 | base-patch16 | large-patch14
+  backend: tensorrt                         # tensorrt | torch  (torch = NanoOwl's PyTorch path; selected explicitly, never a fallback)
+  precision: fp16
+  engine_dir: models/nanoowl                # engines are built on first start and cached here
+  nms_iou: 0.5
+  prompts:                                  # open-vocabulary queries; thresholds are deployment-tunable
+    - {text: "a person",                label: person,     reid_class: person,  threshold: 0.15}
+    - {text: "a man",                   label: person,     reid_class: person,  threshold: 0.15}
+    - {text: "a woman",                 label: person,     reid_class: person,  threshold: 0.15}
+    - {text: "a photo of a car",        label: car,        reid_class: vehicle, threshold: 0.15}
+    - {text: "a photo of a truck",      label: truck,      reid_class: vehicle, threshold: 0.15}
+    - {text: "a photo of a bus",        label: bus,        reid_class: vehicle, threshold: 0.15}
+    - {text: "a photo of a motorcycle", label: motorcycle, reid_class: other,   threshold: 0.15}
+    - {text: "a photo of a bicycle",    label: bicycle,    reid_class: other,   threshold: 0.15}
+
+tracker:
+  track_thresh: 0.3
+  low_thresh: 0.1
+  match_thresh: 0.8
+  track_buffer: 30
+  frame_rate: 5.0
+
+reid:
+  person:
+    config_file: third_party/fast-reid/configs/MSMT17/sbs_R50-ibn.yml
+    weights: models/fastreid/msmt_sbs_R50-ibn.pth
+    min_aspect: 0.8                         # h/w of a plausible person crop; calibrate per site
+    max_aspect: 4.0
+  vehicle:
+    config_file: third_party/fast-reid/configs/VeRi/sbs_R50-ibn.yml
+    weights: models/fastreid/veri_sbs_R50-ibn.pth
+
+identity:
+  enabled: true
+  min_observations: 3
+  match_threshold: 0.70
+  margin: 0.05
+  ambiguous_floor: 0.55
+  max_overlap: 0.3

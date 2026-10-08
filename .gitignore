@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.gst-local/
+models/
+data/
+third_party/
+*.engine
+*.onnx
+*.onnx.data
+*.bin

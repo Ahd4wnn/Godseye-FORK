@@ -1,0 +1,11 @@
+[project]
+name = "godseye"
+version = "0.1.0"
+requires-python = ">=3.12"
+# PyGObject (gi) comes from the system site-packages (venv created with --system-site-packages).
+dependencies = ["numpy", "opencv-python-headless", "PyYAML"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = ["integration: needs real GStreamer plugins / ffmpeg-served streams"]

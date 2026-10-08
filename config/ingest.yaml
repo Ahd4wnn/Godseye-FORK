@@ -1,0 +1,17 @@
+# Phase 1 ingestion config. Credentials: use ${ENV_VAR} in URLs, never literal passwords.
+gstreamer:
+  plugin_paths: [.gst-local/plugins]   # relative to project root; extra plugin dirs (libav H.264, rtmp2, h264parse, tsdemux)
+  preload_libs: [.gst-local/lib/libgstcodecparsers-1.0.so.0, .gst-local/lib/libgstmpegts-1.0.so.0]
+
+defaults:                 # applied to every camera unless overridden
+  sampling:
+    base_fps: 2.0
+    burst_fps: 5.0
+  preprocess:
+    target_size: 640
+
+cameras: []
+# - camera_id: lobby
+#   url: rtsp://user:${LOBBY_PASS}@10.0.0.5:554/stream1
+#   hw_accel: none            # none | nvcodec | vaapi (fails loudly if unavailable)
+#   privacy_masks via preprocess.privacy_masks: [{rect: [0.0, 0.0, 0.2, 0.2], mode: blur}]
