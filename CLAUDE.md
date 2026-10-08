@@ -47,7 +47,7 @@ User → Chat UI → Local LLM / NLU → Referent Resolver → Clarification Eng
 Exact module layout and per-component interfaces: NOT YET DESIGNED (no code exists).
 
 # CURRENT PHASE
-Phase 3 — Storage & evidence (ChromaDB, SQLite, clips): implemented and tested (see PHASE 3 at the end), awaiting user acceptance before Phase 4. Phase 2 and Phase 1 caveats remain (RTMP unverified; Re-ID cross-domain accuracy; vehicle Re-ID unvalidated; 640-vs-768 input decision).
+Phase 4 — Query understanding (Track B up to the Resolved Query Context): implemented and tested (see PHASE 4 at the end), awaiting user acceptance before Phase 5. Query Planner and everything after it are NOT built. Earlier caveats remain (RTMP unverified; Re-ID cross-domain accuracy; vehicle Re-ID unvalidated; 640-vs-768 input; Llama 3 vs Qwen deviation).
 Phase prompts live in `cctv_claude_code_prompts/` (master contract `00_*`, phases `01_`–`08_`). Docs required by the contract are in `docs/`.
 
 # PHASE STATUS
@@ -55,7 +55,7 @@ Phase prompts live in `cctv_claude_code_prompts/` (master contract `00_*`, phase
 - Phase 1 — Video ingestion (GStreamer → sampling → preprocessing): COMPLETE except RTMP integration verification (BLOCKED on an RTMP server)
 - Phase 2 — AI perception, tracking & cross-camera identity (NanoOwl, ByteTrack, FastReID): COMPLETE pending acceptance (vehicle Re-ID unvalidated; Re-ID thresholds uncalibrated for any real site)
 - Phase 3 — Storage & evidence (ChromaDB, SQLite, clips): COMPLETE pending acceptance (retrieval NOT implemented by design; single-writer; clips need ffmpeg)
-- Phase 4 — Query understanding: NOT STARTED
+- Phase 4 — Query understanding: COMPLETE pending acceptance (terminal chat only; LLM = qwen3:8b by user approval, NOT Llama 3)
 - Phase 5 — Retrieval, path reconstruction, response: NOT STARTED
 - Phase 6 — Integration & hardening: NOT STARTED
 - Phase 7 — Final audit: NOT STARTED
@@ -69,8 +69,8 @@ Verified by the tests listed in TEST STATUS:
 - `godseye/ingest/preprocess.py` — privacy masks, letterbox 640, RGB float32 [0,1], coordinate transform with round-trip.
 - `godseye/ingest/manager.py` — `IngestManager` + bounded `FrameBus`.
 - `config/ingest.yaml` (ships with `cameras: []`), `docs/*.md`, `tests/`.
-Phase 2 (`godseye/perception/`): see PHASE 2 below. Phase 3 (`godseye/storage/`): see PHASE 3 below.
-NOT implemented: Phases 4–7 (no query system, LLM integration, UI, retrieval).
+Phase 2 (`godseye/perception/`): see PHASE 2 below. Phase 3 (`godseye/storage/`): see PHASE 3 below. Phase 4 (`godseye/query/`): see PHASE 4 below.
+NOT implemented: Phases 5–7 (no Query Planner, retrieval, path reconstruction, response builder, web UI).
 
 # TECHNOLOGY REQUIREMENTS
 
@@ -84,7 +84,7 @@ Required (never replace with weaker alternatives without explicit architectural 
 - SQLite — structured store
 - Local LLM via Ollama (Llama 3 where specified) — query understanding/planning
 
-Note: the Ollama models present on this machine are Qwen-family, not Llama 3 (see DEPENDENCIES). Which model Track B uses is an OPEN DECISION. Do not silently substitute.
+DECIDED 2026-10-08 (user): Track B uses `qwen3:8b` (the only 8B installed), an explicit deviation from the specified Llama 3 8B. The model is a config value (`config/query.yaml: model`); switching to Llama 3 = `ollama pull llama3:8b` + change the value + re-run tests/test_query_real.py. Do not substitute any other model silently.
 
 # ARCHITECTURAL INVARIANTS
 
@@ -130,7 +130,7 @@ Planned responsibilities (none created yet):
 - Filesystem clips: evidence video clips. SQLite stores paths and time ranges. Layout: NOT DESIGNED.
 
 # TEST STATUS
-Command: `.venv/bin/python -m pytest tests -q` (2026-10-08, after Phase 3): **103 passed, 1 skipped** in about 123 s (Phase 3 added 20) (skipped = RTMP integration test, needs `GODSEYE_TEST_RTMP_URL`). Phase 1 alone: 65 passed. Phase 2 tests: see PHASE 2 TESTS.
+Command: `.venv/bin/python -m pytest tests -q` (2026-10-08, after Phase 4): **134 passed, 1 skipped** in about 141 s (Phase 4 added 31) (skipped = RTMP integration test, needs `GODSEYE_TEST_RTMP_URL`). Phase 1 alone: 65 passed. Phase 2 tests: see PHASE 2 TESTS.
 Covered: config validation, preprocessing/coordinate round-trips, sampler rates (2 fps base, ~5 fps burst, static gating, keepalive), bus policies/fairness, multi-camera isolation, real RTSP and HLS ingest, disconnect/reconnect (stream_epoch), stall recovery, invalid/missing/404 streams, max_attempts, hw_accel failure, queue pressure, loop_file, runtime add/remove, shutdown, environment failure, malformed buffers.
 NOT covered: RTMP, real cameras, hardware decode, soak/performance. No performance numbers measured.
 
@@ -165,8 +165,8 @@ Pending (need user input): LLM choice (Qwen vs Llama 3), NanoOwl/FastReID weight
 2. Phase 2 (`cctv_claude_code_prompts/03_PHASE_2_AI_PERCEPTION.md`): FIRST verify NanoOwl package/weights/inference API and torch/TensorRT on the RTX 5050 (CUDA 13.2). If unverifiable, STOP and report per the master contract. Do not substitute YOLO or another detector.
 
 # NEXT ACTION
-1. User accepts or rejects Phase 3 (and Phase 2 open items: input-size spec, Re-ID calibration data, vehicle Re-ID data).
-2. Phase 4 (`05_*`): query understanding (local LLM, referent resolver, clarification). Phase 5 will read via the schema below; Phase 3 deliberately has no retrieval API except `VectorStore.search`.
+1. User accepts or rejects Phase 4 (and open items: Llama 3 pull?, Re-ID calibration data, vehicle Re-ID data, input-size spec).
+2. Phase 5 (`06_*`): Query Planner (allow-listed operations on a `ResolvedQueryContext`), Retrieval Engine (SQLite + `VectorStore.search`), Path Reconstructor, Response Builder. After each answer call `Session.remember(global_id, reid_class, label)` for the entities returned so pronouns resolve.
 3. Still open from Phase 1: RTMP integration verification.
 
 # PHASE 2 — AI PERCEPTION (COMPLETE pending acceptance; verified 2026-10-08)
@@ -225,3 +225,34 @@ Only frames while a camera has tracks (+ `idle_close_s` after), one segment per 
 5. No retention/rotation/deletion policy for clips, tracks or identities; `gallery_ttl_s` still unimplemented. Single writer only (one process).
 6. Found and fixed: `IdentityResolver(gallery=empty)` silently replaced a persistent gallery with an in-memory one (`gallery or ...` with falsy `__len__`).
 7. Frame timestamps are wall-clock capture times (Phase 1 limitation), not stream PTS.
+
+# PHASE 4 — QUERY UNDERSTANDING (COMPLETE pending acceptance; verified 2026-10-08)
+Boundary: User -> (terminal) Chat -> Local LLM/NLU -> Referent Resolver -> Clarification Engine -> `ResolvedQueryContext`. STOPS before the Query Planner.
+## LLM / model configuration (`config/query.yaml`, `godseye/query/config.py`)
+Ollama 0.32.4 on loopback only (non-local `ollama_url` is rejected: no cloud LLM in the query path). Model `qwen3:8b` (DEVIATION from Llama 3 8B, user-approved), temperature 0, `num_ctx` 4096, `think: false`, JSON-schema constrained output (`format`), `verify()` at startup fails loudly if Ollama/the model is missing. Pydantic's schema is flattened for Ollama's grammar compiler (`llm.grammar_schema`: $refs inlined, validation-only keywords dropped; pydantic re-validates everything strictly afterwards). Measured once: ~2-8 s per LLM call; with qwen3:8b loaded the GPU shows ~6 GB used, so Track A models + the LLM together do NOT comfortably fit in 8 GB VRAM (run them in separate processes/times, or let Ollama offload). Semantic matching uses the OWL-ViT text tower (same CLIP space as the detector), on CPU by default.
+## Query schema (`schema.py`)
+`ParsedQuery` (LLM output, `extra=forbid`, length/range limits): intent {find, locate, track_path, count, when_seen, unknown}; object {label (user's noun), attributes}; location_text; camera_mentions; time (TimeSpec: none|last|day|between + amount/unit/day/part_of_day/clock); referent {none|pronoun|named|demonstrative, text}; spatial {none|left|right|top|bottom|center|in_zone|near_zone, zone_text}. `ResolvedQueryContext` (output): original_query (preserved), intent, object_label (canonical, one of `cfg.objects`), attributes, camera_ids (verified to exist), time_start/time_end (epoch), global_id or track_ref (camera, stream_epoch, track_id), regions (normalised rects, per camera), provenance (slot, mention, method exact|learned|fuzzy|semantic|llm|user|context, target, score).
+Time arithmetic is done by code (`timeres.py`), not the LLM: qwen3:8b answered "yesterday" with the wrong year. The LLM only extracts a TimeSpec. Future or unparseable times trigger a clarification.
+## Resolver (`resolver.py`, `understand.py`)
+Mentions (object, camera, identity) resolve in order: exact (normalised + learned aliases + configured synonyms) -> fuzzy (difflib >= .85 and clear margin) -> semantic (CLIP text cosine >= .55, margin >= .10; objects only) -> LLM choice among the candidates (index validated against the offered list; anything else discarded). Ambiguous/unresolved -> clarification. Cameras: candidates come from Track A's `cameras` table (read-only). Pronouns/demonstratives resolve ONLY from `Session.focus` (recent result entities, filtered by person/vehicle): one candidate -> `context`, several -> multiple choice, none -> point-and-click. Named referents: raw `person-xxxxxxxxxxxx` ids (must exist) or learned identity aliases, else point-and-click. LLM-resolved items are marked `method=llm` in provenance (a UI should show "I read X as Y").
+## Clarification (`Clarification`, `QueryUnderstanding.respond`)
+Kinds: `multiple_choice` (object, ambiguous referent), `camera_grid` (camera), `point_and_click` (referent: answer = camera_id, x, y normalised, ts, frame_w, frame_h -> looked up in observations; overlapping objects -> follow-up multiple choice; untracked identity -> `track_ref`), `region_selection` (zone: normalised rectangle, corners in any order, camera must match), `free_text` (time/subject/zone; question phrased by the LLM `clarify()` with a template fallback, the answer is re-parsed by the NLU with a hint). Answers are validated; invalid ones re-ask; (slot, mention) asked > 3 times or > 6 invalid answers -> `Rejected`. Choices are applied to the SAME pending query (the original text is preserved).
+## Knowledge store (`knowledge.py`, `<store_root>/knowledge.db`, Track B's own SQLite file)
+`aliases(kind camera|object|identity|zone, alias normalised, scope, target, source, uses)`, `zones(camera_id, name, rect)`. Learned from user choices (camera/object/identity names, zones drawn by the user; pronouns are never learned). Verified to persist across instances. Track B never writes to `godseye.db` (opened `mode=ro` + `query_only`).
+## Security boundary
+LLM output is parsed into `ParsedQuery` (strict, inert data). Every value reaching the context is matched against Track A's cameras/identities, the object vocabulary, the knowledge store or computed by code. SQL is parameterised everywhere; there is no tool-calling, shell, filesystem or network use derived from LLM output; user text only travels in the LLM `user` role. A test scans `godseye/query` for execution primitives (`subprocess`, `eval/exec`, `shutil`, deletes, pickle, file writes).
+## Interfaces / usage
+`build(load_config("config/query.yaml"))` -> `QueryUnderstanding`; `handle(session, text)` and `respond(session, cid, answer)` return `Resolved | NeedsClarification | Rejected`. `python -m godseye.query.chat` (needs `data/store/godseye.db` from Track A; point/region questions need a graphical client and are only described in the terminal).
+## PHASE 4 TESTS
+`tests/test_query_unit.py` (21; scripted LLM double only to control malformed/hostile output; real SQLite with the real schema): time arithmetic, schema strictness, local-only config, learned mappings persist, read-only Track A view, resolver stages (fuzzy must not guess between near-equals; LLM choice limited to offered candidates), normal/incomplete/unknown/oversized queries, camera ambiguity + learned mapping reused, missing referent -> click -> identity (+ learned alias), untracked click -> track_ref, ambiguous pronoun -> choices -> context reuse, zone selection learned, future time, loop termination, malformed LLM output (never crashes, one retry recovers), hostile LLM output inert, only verified values in the context, no execution primitives.
+`tests/test_query_real.py` (10; real qwen3:8b + real OWL-ViT text embedder; skipped if Ollama/model missing): full query parse incl. clock-based time, count + relative time, semantic object resolution (pedestrian/lorry/SUV), pronoun from context, missing referent, unknown camera -> clarification -> learned across instances, prompt-injection attempts (DB untouched, only verified values), non-surveillance/gibberish handled.
+## PHASE 4 LIMITATIONS / ISSUES
+1. Deviation: qwen3:8b instead of Llama 3 8B (user-approved). Behaviour with Llama 3 is untested. LLM output varies between prompts; the real-LLM tests assert safe/verified output and key fields, not exact phrasing. qwen3:8b sometimes drops a clause (e.g. omitted "this morning" before an example was added to the prompt); there is no automatic check that every part of the question was captured.
+2. `method=llm` camera/object resolutions are accepted without confirmation (e.g. "north parking entrance" -> `north_gate` was accepted by the LLM). Wrong guesses are possible; provenance exposes them. A stricter policy (always confirm LLM-resolved cameras) is a one-line change if wanted.
+3. Generic words resolve to one class ("vehicle" -> car by CLIP margin); no "any vehicle" semantics yet (Phase 5 planner decision). Attribute descriptions ("red jacket") are carried as text only: visual attribute search is Phase 5.
+4. Cameras have no human-friendly names in Track A: names are learned from clarifications. The camera grid lists ids only (no thumbnails); point-and-click and region selection need a graphical client that does not exist yet (only the terminal chat). The "Chat UI" is a terminal loop, not a web UI.
+5. Time zones: "local" system zone; no DST/zone edge-case tests; 'night' spans 21:00-06:00 (next day).
+6. Single-user in-process sessions; `Session.focus` is filled only by `remember()` (Phase 5 must call it) or by a resolved referent.
+7. Intent is only extracted here; whether an intent can be answered with the stored data is a Phase 5 concern.
+## PHASE 4 DECISIONS
+Code (not the LLM) does calendar arithmetic; LLM output is schema-constrained AND strictly re-validated; resolver cascade never jumps to the LLM first; semantic stage reuses the detector's CLIP text tower instead of a new embedding model; knowledge lives in Track B's own SQLite file, Track A's DB is read-only to Track B; clarification answers are validated and learned only from explicit user choices.

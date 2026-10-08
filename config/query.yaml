@@ -1,0 +1,7 @@
+# Phase 4 query understanding (Track B). See CLAUDE.md (PHASE 4).
+ollama_url: http://127.0.0.1:11434
+model: qwen3:8b            # spec says Llama 3 8B; qwen3:8b approved by the user on 2026-10-08 (the only 8B installed)
+num_ctx: 4096
+store_root: data/store
+embedder_device: cpu
+objects: [person, car, truck, bus, motorcycle, bicycle]

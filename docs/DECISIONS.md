@@ -21,3 +21,9 @@
 16. **One clip segment per camera, not per track**; observations point at (clip_id, clip_frame); published only after ffprobe validation + atomic rename.
 17. **Clip failure degrades, metadata failure raises.** Never silent: counters, ERROR log, NULL clip refs.
 18. **ffmpeg subprocess for H.264 evidence encoding** (OpenCV's writer has no H.264 here; system GStreamer has no x264enc).
+
+## Phase 4 (details in CLAUDE.md, PHASE 4)
+19. **qwen3:8b instead of Llama 3 8B** (only 8B installed; user-approved 2026-10-08); model name is config.
+20. **Time arithmetic in code**; the LLM extracts a `TimeSpec` only.
+21. **Resolver cascade exact -> fuzzy -> semantic (OWL-ViT text tower) -> LLM**; LLM may only pick from offered candidates.
+22. **Track B owns `knowledge.db`; `godseye.db` is opened read-only.**
